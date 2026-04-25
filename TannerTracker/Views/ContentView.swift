@@ -15,7 +15,7 @@ struct ContentView: View {
     @State private var showAddWorkout = false
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack {
             Color(hex: "#1A1A1A").ignoresSafeArea()
 
             Group {
@@ -31,14 +31,14 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            CustomTabBar(
+        }
+        .safeAreaInset(edge: .bottom) {
+            FloatingBottomBar(
                 selectedTab: $selectedTab,
                 showAddWorkout: $showAddWorkout,
                 accentColor: settings.accentColor
             )
         }
-        .ignoresSafeArea(edges: .bottom)
         .sheet(isPresented: $showAddWorkout) {
             AddWorkoutView()
         }
@@ -46,56 +46,52 @@ struct ContentView: View {
     }
 }
 
-struct CustomTabBar: View {
+struct FloatingBottomBar: View {
     @Binding var selectedTab: AppTab
     @Binding var showAddWorkout: Bool
     var accentColor: Color
 
     var body: some View {
-        HStack(spacing: 0) {
-            TabBarItem(icon: "calendar", label: "Today", isSelected: selectedTab == .today, accentColor: accentColor) {
-                selectedTab = .today
+        HStack(alignment: .center) {
+            // Liquid glass tab selector
+            HStack(spacing: 4) {
+                TabBarItem(icon: "calendar", label: "Today", isSelected: selectedTab == .today, accentColor: accentColor) {
+                    selectedTab = .today
+                }
+                TabBarItem(icon: "camera", label: "Photos", isSelected: selectedTab == .photos, accentColor: accentColor) {
+                    selectedTab = .photos
+                }
+                TabBarItem(icon: "dumbbell", label: "Progress", isSelected: selectedTab == .progress, accentColor: accentColor) {
+                    selectedTab = .progress
+                }
+                TabBarItem(icon: "figure.strengthtraining.traditional", label: "Lifts", isSelected: selectedTab == .threshold, accentColor: accentColor) {
+                    selectedTab = .threshold
+                }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .glassEffect(in: Capsule())
 
-            TabBarItem(icon: "camera", label: "Photos", isSelected: selectedTab == .photos, accentColor: accentColor) {
-                selectedTab = .photos
-            }
+            Spacer()
 
-            // Pronounced center add button
+            // Floating accent plus button
             Button {
                 showAddWorkout = true
             } label: {
                 ZStack {
                     Circle()
                         .fill(accentColor)
-                        .frame(width: 60, height: 60)
+                        .frame(width: 56, height: 56)
                         .shadow(color: accentColor.opacity(0.55), radius: 14, y: 4)
-
                     Image(systemName: "plus")
                         .font(.title2.weight(.semibold))
                         .foregroundStyle(.white)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .offset(y: -12)
-
-            TabBarItem(icon: "dumbbell", label: "Progress", isSelected: selectedTab == .progress, accentColor: accentColor) {
-                selectedTab = .progress
-            }
-
-            TabBarItem(icon: "figure.strengthtraining.traditional", label: "Lifts", isSelected: selectedTab == .threshold, accentColor: accentColor) {
-                selectedTab = .threshold
-            }
+            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 12)
-        .padding(.bottom, 30)
-        .background(.ultraThinMaterial)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.white.opacity(0.08))
-                .frame(height: 0.5)
-        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
     }
 }
 
