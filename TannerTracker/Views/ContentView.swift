@@ -6,7 +6,7 @@
 import SwiftUI
 
 enum AppTab {
-    case today, photos, progress, threshold
+    case today, photos, progress
 }
 
 struct ContentView: View {
@@ -26,8 +26,6 @@ struct ContentView: View {
                     PhotosView()
                 case .progress:
                     WorkoutProgressView()
-                case .threshold:
-                    ThresholdView()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -58,22 +56,25 @@ struct FloatingBottomBar: View {
                 TabBarItem(icon: "calendar", label: "Today", isSelected: selectedTab == .today, accentColor: accentColor) {
                     selectedTab = .today
                 }
+                .padding(.horizontal, 10)
                 TabBarItem(icon: "camera", label: "Photos", isSelected: selectedTab == .photos, accentColor: accentColor) {
                     selectedTab = .photos
                 }
-                TabBarItem(icon: "dumbbell", label: "Progress", isSelected: selectedTab == .progress, accentColor: accentColor) {
+                .padding(.horizontal, 10)
+                TabBarItem(icon: "figure.strengthtraining.traditional", label: "Progress", isSelected: selectedTab == .progress, accentColor: accentColor) {
                     selectedTab = .progress
                 }
-                TabBarItem(icon: "figure.strengthtraining.traditional", label: "Lifts", isSelected: selectedTab == .threshold, accentColor: accentColor) {
-                    selectedTab = .threshold
-                }
+                .padding(.horizontal, 10)
             }
-            .padding(.horizontal, 14)
+            .fixedSize()
+            .padding(.horizontal, 20)
             .padding(.vertical, 10)
-            .glassEffect(in: Capsule())
+            .glassEffect()
 
             Spacer()
-
+            Spacer()
+            
+            
             // Floating accent plus button
             Button {
                 showAddWorkout = true
@@ -90,8 +91,8 @@ struct FloatingBottomBar: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 40)
+        .padding(.bottom, 0)
     }
 }
 

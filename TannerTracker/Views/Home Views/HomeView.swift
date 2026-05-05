@@ -11,9 +11,13 @@ struct TodayView: View {
     @Environment(AppSettings.self) var settings
     @Query(sort: \WorkoutEntry.date) private var allEntries: [WorkoutEntry]
 
-    @State private var showCalendar = false
+    @State private var showMonthView = false
     @State private var showSettings = false
     @State private var editingEntry: WorkoutEntry?
+
+    private var currentMonthName: String {
+        Date().formatted(.dateTime.month(.wide))
+    }
 
     private var todayEntries: [WorkoutEntry] {
         allEntries.filter { Calendar.current.isDateInToday($0.date) }
@@ -35,9 +39,9 @@ struct TodayView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        showCalendar = true
+                        showMonthView = true
                     } label: {
-                        Image(systemName: "calendar")
+                        Label(currentMonthName, systemImage: "chevron.left")
                             .foregroundStyle(settings.accentColor)
                     }
                 }
@@ -51,8 +55,8 @@ struct TodayView: View {
                 }
             }
         }
-        .sheet(isPresented: $showCalendar) {
-            WorkoutCalendarView()
+        .sheet(isPresented: $showMonthView) {
+            MonthView()
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()

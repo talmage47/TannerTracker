@@ -5,27 +5,25 @@
 
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct IdentifiableDate: Identifiable {
     let id = UUID()
     let date: Date
 }
 
-struct WorkoutCalendarView: View {
+struct MonthView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(AppSettings.self) var settings
     @Query(sort: \WorkoutEntry.date) private var allEntries: [WorkoutEntry]
 
-    @State private var currentMonth = Date()
     @State private var selectedDay: IdentifiableDate?
 
-    private let calendar = Calendar.current
-    private let gridColumns = Array(repeating: GridItem(.flexible()), count: 7)
-    private let dayAbbreviations = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
-
-    private var datesWithWorkouts: Set<String> {
-        Set(allEntries.map { dayKey($0.date) })
+    private var datesWithWorkouts: Set<DateComponents> {
+        Set(allEntries.map {
+            Calendar.current.dateComponents([.year, .month, .day], from: $0.date)
+        })
     }
 
     var body: some View {
@@ -33,33 +31,11 @@ struct WorkoutCalendarView: View {
             ZStack {
                 Color(hex: "#1A1A1A").ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    monthNavigationHeader
-
-                    dayOfWeekRow
-
-                    LazyVGrid(columns: gridColumns, spacing: 6) {
-                        ForEach(Array(calendarDays.enumerated()), id: \.offset) { _, date in
-                            if let date {
-                                CalendarDayCell(
-                                    date: date,
-                                    isToday: calendar.isDateInToday(date),
-                                    hasWorkout: datesWithWorkouts.contains(dayKey(date)),
-                                    accentColor: settings.accentColor
-                                ) {
-                                    if datesWithWorkouts.contains(dayKey(date)) {
-                                        selectedDay = IdentifiableDate(date: date)
-                                    }
-                                }
-                            } else {
-                                Color.clear
-                                    .aspectRatio(1, contentMode: .fit)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-
-                    Spacer()
+                UICalendarViewRepresentable(
+                    datesWithWorkouts: datesWithWorkouts,
+                    accentColor: settings.accentColor
+                ) { date in
+                    selectedDay = IdentifiableDate(date: date)
                 }
             }
             .navigationTitle("Calendar")
@@ -75,111 +51,73 @@ struct WorkoutCalendarView: View {
             DayWorkoutsView(date: identDate.date)
         }
     }
-
-    private var monthNavigationHeader: some View {
-        HStack {
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
-                }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(settings.accentColor)
-            }
-
-            Spacer()
-
-            Text(currentMonth, format: .dateTime.month(.wide).year())
-                .font(.title3.bold())
-                .foregroundStyle(.white)
-
-            Spacer()
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
-                }
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(settings.accentColor)
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 16)
-    }
-
-    private var dayOfWeekRow: some View {
-        HStack {
-            ForEach(dayAbbreviations, id: \.self) { day in
-                Text(day)
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.gray)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-    }
-
-    private var calendarDays: [Date?] {
-        let startOfMonth = calendar.date(
-            from: calendar.dateComponents([.year, .month], from: currentMonth)
-        )!
-        let firstWeekday = calendar.component(.weekday, from: startOfMonth) - 1
-        let daysInMonth = calendar.range(of: .day, in: .month, for: currentMonth)!.count
-
-        var days: [Date?] = Array(repeating: nil, count: firstWeekday)
-        for day in 0..<daysInMonth {
-            if let date = calendar.date(byAdding: .day, value: day, to: startOfMonth) {
-                days.append(date)
-            }
-        }
-        return days
-    }
-
-    private func dayKey(_ date: Date) -> String {
-        let comps = calendar.dateComponents([.year, .month, .day], from: date)
-        return "\(comps.year!)-\(comps.month!)-\(comps.day!)"
-    }
 }
 
-struct CalendarDayCell: View {
-    let date: Date
-    let isToday: Bool
-    let hasWorkout: Bool
+// MARK: - UICalendarView Wrapper
+
+struct UICalendarViewRepresentable: UIViewRepresentable {
+    let datesWithWorkouts: Set<DateComponents>
     let accentColor: Color
-    let action: () -> Void
+    let onDateSelected: (Date) -> Void
 
-    private let calendar = Calendar.current
+    func makeUIView(context: Context) -> UICalendarView {
+        let calendarView = UICalendarView()
+        calendarView.calendar = Calendar.current
+        calendarView.locale = Locale.current
+        calendarView.backgroundColor = .clear
+        calendarView.delegate = context.coordinator
 
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 3) {
-                ZStack {
-                    if isToday {
-                        Circle()
-                            .stroke(accentColor, lineWidth: 1.5)
-                            .frame(width: 34, height: 34)
-                    }
+        let selection = UICalendarSelectionSingleDate(delegate: context.coordinator)
+        calendarView.selectionBehavior = selection
 
-                    Text("\(calendar.component(.day, from: date))")
-                        .font(.system(size: 15, weight: isToday ? .bold : .regular))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                }
+        return calendarView
+    }
 
-                Circle()
-                    .fill(hasWorkout ? accentColor : Color.clear)
-                    .frame(width: 5, height: 5)
-            }
+    func updateUIView(_ uiView: UICalendarView, context: Context) {
+        context.coordinator.datesWithWorkouts = datesWithWorkouts
+        context.coordinator.onDateSelected = onDateSelected
+        uiView.reloadDecorations(forDateComponents: Array(datesWithWorkouts), animated: true)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(datesWithWorkouts: datesWithWorkouts, accentColor: accentColor, onDateSelected: onDateSelected)
+    }
+
+    class Coordinator: NSObject, UICalendarViewDelegate, UICalendarSelectionSingleDateDelegate {
+        var datesWithWorkouts: Set<DateComponents>
+        let accentColor: UIColor
+        var onDateSelected: (Date) -> Void
+
+        init(datesWithWorkouts: Set<DateComponents>, accentColor: Color, onDateSelected: @escaping (Date) -> Void) {
+            self.datesWithWorkouts = datesWithWorkouts
+            self.accentColor = UIColor(accentColor)
+            self.onDateSelected = onDateSelected
         }
-        .buttonStyle(.plain)
-        .disabled(!hasWorkout)
-        .opacity(hasWorkout || isToday ? 1.0 : 0.4)
-        .aspectRatio(1, contentMode: .fit)
+
+        func calendarView(_ calendarView: UICalendarView, decorationFor dateComponents: DateComponents) -> UICalendarView.Decoration? {
+            guard hasWorkout(on: dateComponents) else { return nil }
+            return .default(color: accentColor, size: .small)
+        }
+
+        func dateSelection(_ selection: UICalendarSelectionSingleDate, canSelectDate dateComponents: DateComponents?) -> Bool {
+            guard let dateComponents else { return false }
+            return hasWorkout(on: dateComponents)
+        }
+
+        func dateSelection(_ selection: UICalendarSelectionSingleDate, didSelectDate dateComponents: DateComponents?) {
+            guard let dateComponents,
+                  hasWorkout(on: dateComponents),
+                  let date = Calendar.current.date(from: dateComponents) else { return }
+            onDateSelected(date)
+        }
+
+        private func hasWorkout(on components: DateComponents) -> Bool {
+            datesWithWorkouts.contains(where: {
+                $0.year == components.year &&
+                $0.month == components.month &&
+                $0.day == components.day
+            })
+        }
     }
 }
 
@@ -254,6 +192,6 @@ struct DayWorkoutsView: View {
 }
 
 #Preview {
-    WorkoutCalendarView()
+    MonthView()
         .environment(AppSettings.shared)
 }
