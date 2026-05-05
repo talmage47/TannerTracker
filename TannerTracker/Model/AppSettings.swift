@@ -9,12 +9,20 @@ import SwiftUI
 class AppSettings {
     static let shared = AppSettings()
 
+    private let store = NSUbiquitousKeyValueStore.default
+
     var unitSystem: String {
-        didSet { UserDefaults.standard.set(unitSystem, forKey: "unitSystem") }
+        didSet {
+            store.set(unitSystem, forKey: "unitSystem")
+            store.synchronize()
+        }
     }
 
     var accentColorHex: String {
-        didSet { UserDefaults.standard.set(accentColorHex, forKey: "accentColorHex") }
+        didSet {
+            store.set(accentColorHex, forKey: "accentColorHex")
+            store.synchronize()
+        }
     }
 
     var accentColor: Color {
@@ -27,7 +35,17 @@ class AppSettings {
     }
 
     private init() {
-        self.unitSystem = UserDefaults.standard.string(forKey: "unitSystem") ?? "imperial"
-        self.accentColorHex = UserDefaults.standard.string(forKey: "accentColorHex") ?? "#FF6B35"
+        self.unitSystem = store.string(forKey: "unitSystem") ?? "imperial"
+        self.accentColorHex = store.string(forKey: "accentColorHex") ?? "#007AFF"
+
+        NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: store,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.unitSystem = self.store.string(forKey: "unitSystem") ?? self.unitSystem
+            self.accentColorHex = self.store.string(forKey: "accentColorHex") ?? self.accentColorHex
+        }
     }
 }

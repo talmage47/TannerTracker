@@ -13,6 +13,7 @@ struct AddWorkoutView: View {
     @Query(sort: \Exercise.name) private var exercises: [Exercise]
 
     var editingEntry: WorkoutEntry?
+    var date: Date
 
     @State private var selectedExerciseName: String
     @State private var weight: Int
@@ -20,8 +21,9 @@ struct AddWorkoutView: View {
     @State private var sets: Int
     @State private var showExerciseSelector = false
 
-    init(editingEntry: WorkoutEntry? = nil) {
+    init(editingEntry: WorkoutEntry? = nil, date: Date = Date()) {
         self.editingEntry = editingEntry
+        self.date = date
         _selectedExerciseName = State(initialValue: editingEntry?.exerciseName ?? "")
         _weight = State(initialValue: editingEntry?.weight ?? 0)
         _reps = State(initialValue: editingEntry?.reps ?? 10)
@@ -59,8 +61,6 @@ struct AddWorkoutView: View {
         }
     }
 
-    // MARK: - Exercise Selector
-
     private var exerciseSelector: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel(text: "Exercise")
@@ -88,8 +88,6 @@ struct AddWorkoutView: View {
             }
         }
     }
-
-    // MARK: - Weight Picker
 
     private var weightPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -122,14 +120,11 @@ struct AddWorkoutView: View {
         }
     }
 
-    // MARK: - Reps & Sets Pickers
-
     private var repsSetsPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionLabel(text: "Reps & Sets")
 
             HStack(spacing: 0) {
-                // Reps column
                 HStack(spacing: 8) {
                     Text("Reps:")
                         .foregroundStyle(.gray)
@@ -146,13 +141,11 @@ struct AddWorkoutView: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                // Divider
                 Rectangle()
                     .fill(Color.white.opacity(0.1))
                     .frame(width: 1)
                     .padding(.vertical, 16)
 
-                // Sets column
                 HStack(spacing: 8) {
                     Text("Sets:")
                         .foregroundStyle(.gray)
@@ -177,8 +170,6 @@ struct AddWorkoutView: View {
             )
         }
     }
-
-    // MARK: - Save Button
 
     private var saveButton: some View {
         Button {
@@ -206,175 +197,11 @@ struct AddWorkoutView: View {
                 exerciseName: selectedExerciseName,
                 weight: weight,
                 reps: reps,
-                sets: sets
+                sets: sets,
+                date: date
             )
             modelContext.insert(entry)
         }
-        dismiss()
-    }
-}
-
-// MARK: - Section Label
-
-struct SectionLabel: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.gray)
-            .textCase(.uppercase)
-            .tracking(0.5)
-    }
-}
-
-// MARK: - Exercise Selector Sheet
-
-struct ExerciseSelectorView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
-    @Environment(AppSettings.self) var settings
-
-    let exercises: [Exercise]
-    @Binding var selectedName: String
-
-    @State private var showNewExercisePopup = false
-    @State private var newExerciseName = ""
-    @FocusState private var nameFieldFocused: Bool
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color(hex: "#1A1A1A").ignoresSafeArea()
-
-                List {
-                    ForEach(exercises) { exercise in
-                        Button {
-                            selectedName = exercise.name
-                            dismiss()
-                        } label: {
-                            HStack {
-                                Text(exercise.name)
-                                    .foregroundStyle(.white)
-                                Spacer()
-                                if selectedName == exercise.name {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(settings.accentColor)
-                                        .fontWeight(.semibold)
-                                }
-                            }
-                        }
-                        .listRowBackground(Color(hex: "#242424"))
-                        .listRowSeparatorTint(Color.white.opacity(0.08))
-                    }
-
-                    Button {
-                        showNewExercisePopup = true
-                        nameFieldFocused = true
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(settings.accentColor)
-                            Text("Create New Exercise")
-                                .foregroundStyle(settings.accentColor)
-                        }
-                    }
-                    .listRowBackground(Color(hex: "#242424"))
-                    .listRowSeparatorTint(Color.white.opacity(0.08))
-                }
-                .scrollContentBackground(.hidden)
-
-                // Liquid glass new exercise popup
-                if showNewExercisePopup {
-                    newExerciseOverlay
-                }
-            }
-            .navigationTitle("Select Exercise")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(.gray)
-                }
-            }
-        }
-    }
-
-    private var newExerciseOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.55)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    dismissPopup()
-                }
-
-            VStack(spacing: 20) {
-                VStack(spacing: 6) {
-                    Image(systemName: "dumbbell.fill")
-                        .font(.title2)
-                        .foregroundStyle(settings.accentColor)
-
-                    Text("New Exercise")
-                        .font(.title3.bold())
-                        .foregroundStyle(.white)
-                }
-
-                TextField("Exercise name", text: $newExerciseName)
-                    .textFieldStyle(.plain)
-                    .focused($nameFieldFocused)
-                    .padding(12)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .foregroundStyle(.white)
-                    .submitLabel(.done)
-                    .onSubmit {
-                        if !newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty {
-                            createExercise()
-                        }
-                    }
-
-                HStack(spacing: 12) {
-                    Button("Cancel") {
-                        dismissPopup()
-                    }
-                    .foregroundStyle(.gray)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                    Button("Create") {
-                        createExercise()
-                    }
-                    .foregroundStyle(.white)
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty
-                                ? Color.gray.opacity(0.3) : settings.accentColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .disabled(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            .padding(24)
-            .glassEffect(in: RoundedRectangle(cornerRadius: 22))
-            .padding(.horizontal, 28)
-        }
-    }
-
-    private func dismissPopup() {
-        nameFieldFocused = false
-        showNewExercisePopup = false
-        newExerciseName = ""
-    }
-
-    private func createExercise() {
-        let trimmed = newExerciseName.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        let exercise = Exercise(name: trimmed)
-        modelContext.insert(exercise)
-        selectedName = trimmed
-        dismissPopup()
         dismiss()
     }
 }
