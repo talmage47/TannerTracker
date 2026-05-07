@@ -49,13 +49,8 @@ struct AddWorkoutView: View {
             }
             .navigationTitle(editingEntry == nil ? "Add Workout" : "Edit Workout")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
-                        .foregroundStyle(.gray)
-                }
-            }
         }
+        .presentationDragIndicator(.visible)
         .sheet(isPresented: $showExerciseSelector) {
             ExerciseSelectorView(exercises: exercises, selectedName: $selectedExerciseName)
         }

@@ -6,7 +6,7 @@
 import SwiftUI
 
 enum AppTab {
-    case today, progress
+    case today, progress, add
 }
 
 struct ContentView: View {
@@ -15,30 +15,28 @@ struct ContentView: View {
     @State private var showAddWorkout = false
 
     var body: some View {
-        ZStack {
-            Color(hex: "#1A1A1A").ignoresSafeArea()
-
-            Group {
-                switch selectedTab {
-                case .today:
-                    TodayView()
-                case .progress:
-                    WorkoutProgressView()
-                }
+        TabView(selection: $selectedTab) {
+            Tab("Today", systemImage: "calendar", value: AppTab.today) {
+                TodayView()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Tab("Progress", systemImage: "figure.strengthtraining.traditional", value: AppTab.progress) {
+                WorkoutProgressView()
+            }
+            Tab("Add", systemImage: "plus", value: AppTab.add, role: .search) {
+                Color.clear
+            }
         }
-        .safeAreaInset(edge: .bottom) {
-            FloatingBottomBar(
-                selectedTab: $selectedTab,
-                showAddWorkout: $showAddWorkout,
-                accentColor: settings.accentColor
-            )
+        .tint(settings.accentColor)
+        .tabBarMinimizeBehavior(.onScrollDown)
+        .onChange(of: selectedTab) { old, new in
+            if new == .add {
+                selectedTab = old
+                showAddWorkout = true
+            }
         }
         .sheet(isPresented: $showAddWorkout) {
             AddWorkoutView()
         }
-        .tint(settings.accentColor)
     }
 }
 
