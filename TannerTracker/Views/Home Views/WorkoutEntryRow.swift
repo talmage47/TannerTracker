@@ -10,6 +10,10 @@ struct WorkoutEntryRow: View {
     let unitLabel: String
     let accentColor: Color
 
+    private func formatWeight(_ value: Double) -> String {
+        value.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(value))" : String(format: "%.1f", value)
+    }
+
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
@@ -18,7 +22,7 @@ struct WorkoutEntryRow: View {
                     .foregroundStyle(.white)
 
                 HStack(spacing: 14) {
-                    WorkoutStatBadge(value: "\(entry.weight) \(unitLabel)", icon: "scalemass.fill")
+                    WorkoutStatBadge(value: "\(formatWeight(entry.weight)) \(unitLabel)", icon: "scalemass.fill")
                     WorkoutStatBadge(value: "\(entry.reps) reps", icon: "repeat")
                     WorkoutStatBadge(value: "\(entry.sets) sets", icon: "square.stack.fill")
                 }

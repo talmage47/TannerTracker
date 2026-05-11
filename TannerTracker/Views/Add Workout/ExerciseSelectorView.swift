@@ -14,9 +14,19 @@ struct ExerciseSelectorView: View {
     let exercises: [Exercise]
     @Binding var selectedName: String
 
+    @State private var searchText = ""
     @State private var showNewExercisePopup = false
     @State private var newExerciseName = ""
     @FocusState private var nameFieldFocused: Bool
+
+    private var filteredExercises: [Exercise] {
+        guard !searchText.isEmpty else { return exercises }
+        return exercises.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private var hasExactMatch: Bool {
+        exercises.contains { $0.name.localizedCaseInsensitiveCompare(searchText) == .orderedSame }
+    }
 
     var body: some View {
         NavigationStack {
@@ -24,7 +34,7 @@ struct ExerciseSelectorView: View {
                 Color(hex: "#1A1A1A").ignoresSafeArea()
 
                 List {
-                    ForEach(exercises) { exercise in
+                    ForEach(filteredExercises) { exercise in
                         Button {
                             selectedName = exercise.name
                             dismiss()
@@ -44,21 +54,37 @@ struct ExerciseSelectorView: View {
                         .listRowSeparatorTint(Color.white.opacity(0.08))
                     }
 
-                    Button {
-                        showNewExercisePopup = true
-                        nameFieldFocused = true
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(settings.accentColor)
-                            Text("Create New Exercise")
-                                .foregroundStyle(settings.accentColor)
+                    if !searchText.isEmpty && !hasExactMatch {
+                        Button {
+                            addExercise(name: searchText)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(settings.accentColor)
+                                Text("Add \"\(searchText)\"")
+                                    .foregroundStyle(settings.accentColor)
+                            }
                         }
+                        .listRowBackground(Color(hex: "#242424"))
+                        .listRowSeparatorTint(Color.white.opacity(0.08))
+                    } else if searchText.isEmpty {
+                        Button {
+                            showNewExercisePopup = true
+                            nameFieldFocused = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(settings.accentColor)
+                                Text("Create New Exercise")
+                                    .foregroundStyle(settings.accentColor)
+                            }
+                        }
+                        .listRowBackground(Color(hex: "#242424"))
+                        .listRowSeparatorTint(Color.white.opacity(0.08))
                     }
-                    .listRowBackground(Color(hex: "#242424"))
-                    .listRowSeparatorTint(Color.white.opacity(0.08))
                 }
                 .scrollContentBackground(.hidden)
+                .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search exercises")
 
                 if showNewExercisePopup {
                     newExerciseOverlay
@@ -73,15 +99,14 @@ struct ExerciseSelectorView: View {
                 }
             }
         }
+        .presentationDragIndicator(.visible)
     }
 
     private var newExerciseOverlay: some View {
         ZStack {
             Color.black.opacity(0.55)
                 .ignoresSafeArea()
-                .onTapGesture {
-                    dismissPopup()
-                }
+                .onTapGesture { dismissPopup() }
 
             VStack(spacing: 20) {
                 VStack(spacing: 6) {
@@ -109,32 +134,37 @@ struct ExerciseSelectorView: View {
                     }
 
                 HStack(spacing: 12) {
-                    Button("Cancel") {
-                        dismissPopup()
-                    }
-                    .foregroundStyle(.gray)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    Button("Cancel") { dismissPopup() }
+                        .foregroundStyle(.gray)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                    Button("Create") {
-                        createExercise()
-                    }
-                    .foregroundStyle(.white)
-                    .fontWeight(.semibold)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty
-                                ? Color.gray.opacity(0.3) : settings.accentColor)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .disabled(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Create") { createExercise() }
+                        .foregroundStyle(.white)
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty
+                                    ? Color.gray.opacity(0.3) : settings.accentColor)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .disabled(newExerciseName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             .padding(24)
             .glassEffect(in: RoundedRectangle(cornerRadius: 22))
             .padding(.horizontal, 28)
         }
+    }
+
+    private func addExercise(name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let exercise = Exercise(name: trimmed)
+        modelContext.insert(exercise)
+        selectedName = trimmed
+        dismiss()
     }
 
     private func dismissPopup() {

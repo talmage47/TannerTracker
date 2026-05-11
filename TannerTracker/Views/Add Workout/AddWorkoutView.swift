@@ -16,10 +16,17 @@ struct AddWorkoutView: View {
     var date: Date
 
     @State private var selectedExerciseName: String
-    @State private var weight: Int
+    @State private var weight: Double
     @State private var reps: Int
     @State private var sets: Int
     @State private var showExerciseSelector = false
+
+    private static let weightValues: [Double] = {
+        var values: [Double] = [0]
+        values += stride(from: 2.5, through: 20, by: 2.5).map { $0 }
+        values += stride(from: 25, through: 1000, by: 5).map { $0 }
+        return values
+    }()
 
     init(editingEntry: WorkoutEntry? = nil, date: Date = Date()) {
         self.editingEntry = editingEntry
@@ -49,6 +56,12 @@ struct AddWorkoutView: View {
             }
             .navigationTitle(editingEntry == nil ? "Add Workout" : "Edit Workout")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Cancel") { dismiss() }
+                        .foregroundStyle(.gray)
+                }
+            }
         }
         .presentationDragIndicator(.visible)
         .sheet(isPresented: $showExerciseSelector) {
@@ -92,8 +105,8 @@ struct AddWorkoutView: View {
                 Spacer()
 
                 Picker("Weight", selection: $weight) {
-                    ForEach(0...999, id: \.self) { val in
-                        Text("\(val)").tag(val)
+                    ForEach(Self.weightValues, id: \.self) { val in
+                        Text(formatWeight(val)).tag(val)
                     }
                 }
                 .pickerStyle(.wheel)
@@ -179,6 +192,10 @@ struct AddWorkoutView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14))
         }
         .disabled(selectedExerciseName.isEmpty)
+    }
+
+    private func formatWeight(_ value: Double) -> String {
+        value.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(value))" : String(format: "%.1f", value)
     }
 
     private func save() {
