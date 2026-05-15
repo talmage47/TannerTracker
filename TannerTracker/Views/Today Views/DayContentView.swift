@@ -45,6 +45,28 @@ struct DayContentView: View {
         allEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
     }
 
+    private struct ExerciseGroup: Identifiable {
+        let id: String
+        let exercise: Exercise?
+        let entries: [WorkoutEntry]
+    }
+
+    private func groupedEntries(_ entries: [WorkoutEntry]) -> [ExerciseGroup] {
+        var orderKeys: [String] = []
+        var groups: [String: [WorkoutEntry]] = [:]
+        for entry in entries {
+            let key = entry.exercise.map { String(describing: $0.persistentModelID) } ?? "__nil__"
+            if groups[key] == nil {
+                orderKeys.append(key)
+                groups[key] = []
+            }
+            groups[key]!.append(entry)
+        }
+        return orderKeys.map { key in
+            ExerciseGroup(id: key, exercise: groups[key]!.first?.exercise, entries: groups[key]!)
+        }
+    }
+
     private func completeDrag(translation: CGFloat) {
         let goingRight = translation > 0
         withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
@@ -108,11 +130,15 @@ struct DayContentView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(dayEntries) { entry in
-                            WorkoutEntryRow(
-                                entry: entry,
+                        ForEach(groupedEntries(dayEntries)) { group in
+                            ExerciseEntryCard(
+                                exercise: group.exercise,
+                                entries: group.entries,
                                 unitLabel: settings.unitLabel,
-                                accentColor: settings.accentColor
+                                accentColor: settings.accentColor,
+                                isEditing: false,
+                                onTap: { _ in },
+                                onDelete: { _ in }
                             )
                         }
                     }
@@ -194,37 +220,19 @@ struct DayContentView: View {
     private var workoutList: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                ForEach(displayDateEntries) { entry in
-                    HStack(spacing: 12) {
-                        if isEditing {
-                            Button {
-                                entryToDelete = entry
-                                showDeleteAlert = true
-                            } label: {
-                                Image(systemName: "minus.circle.fill")
-                                    .foregroundStyle(.red)
-                                    .font(.title2)
-                            }
-                            .buttonStyle(.plain)
-                            .transition(.move(edge: .leading).combined(with: .opacity))
+                ForEach(groupedEntries(displayDateEntries)) { group in
+                    ExerciseEntryCard(
+                        exercise: group.exercise,
+                        entries: group.entries,
+                        unitLabel: settings.unitLabel,
+                        accentColor: settings.accentColor,
+                        isEditing: isEditing,
+                        onTap: { entry in editingEntry = entry },
+                        onDelete: { entry in
+                            entryToDelete = entry
+                            showDeleteAlert = true
                         }
-
-                        WorkoutEntryRow(
-                            entry: entry,
-                            unitLabel: settings.unitLabel,
-                            accentColor: settings.accentColor
-                        )
-                        .onTapGesture {
-                            if !isEditing { editingEntry = entry }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                modelContext.delete(entry)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
+                    )
                 }
 
                 if isEditing {

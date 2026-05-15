@@ -25,19 +25,21 @@ struct TannerTrackerApp: App {
     }
 
     private static func makeContainer(schema: Schema) -> ModelContainer {
-        let config = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
+        let cloudConfig = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
+        if let container = try? ModelContainer(for: schema, configurations: [cloudConfig]) {
+            return container
+        }
+        // Schema mismatch or corrupt store — wipe and retry with CloudKit.
+        wipeDefaultStore()
+        if let container = try? ModelContainer(for: schema, configurations: [cloudConfig]) {
+            return container
+        }
+        // CloudKit unavailable (simulator, no iCloud account, etc.) — fall back to local store.
+        let localConfig = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
         do {
-            return try ModelContainer(for: schema, configurations: [config])
+            return try ModelContainer(for: schema, configurations: [localConfig])
         } catch {
-            // Schema changed and the existing store is incompatible — wipe and start fresh.
-            // This only happens during development after model changes.
-            // TODO: Replace with a proper SchemaMigrationPlan before App Store release.
-            wipeDefaultStore()
-            do {
-                return try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Could not create ModelContainer: \(error)")
-            }
+            fatalError("Could not create ModelContainer: \(error)")
         }
     }
 
