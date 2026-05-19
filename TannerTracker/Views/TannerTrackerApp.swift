@@ -9,10 +9,15 @@ import SwiftData
 @main
 struct TannerTrackerApp: App {
     let container: ModelContainer
+    let iCloudAvailable: Bool
+    @State private var showCloudKitAlert: Bool
 
     init() {
         let schema = Schema([Exercise.self, WorkoutEntry.self])
-        container = Self.makeContainer(schema: schema)
+        let (c, available) = Self.makeContainer(schema: schema)
+        container = c
+        iCloudAvailable = available
+        _showCloudKitAlert = State(initialValue: !available)
     }
 
     var body: some Scene {
@@ -21,32 +26,52 @@ struct TannerTrackerApp: App {
                 .modelContainer(container)
                 .environment(AppSettings.shared)
                 .preferredColorScheme(.dark)
+                .alert("iCloud Unavailable", isPresented: $showCloudKitAlert) {
+                    Button("OK") {}
+                } message: {
+                    Text("Your workouts are being saved locally only. Sign in to iCloud in Settings to sync your data and prevent data loss if the app is reinstalled.")
+                }
         }
     }
 
-    private static func makeContainer(schema: Schema) -> ModelContainer {
-        let cloudConfig = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
+    // Returns (container, iCloudAvailable). CloudKit and local stores use separate files
+    // so they can never conflict. Local data is preserved across kill/restart regardless
+    // of CloudKit availability.
+    private static func makeContainer(schema: Schema) -> (ModelContainer, Bool) {
+        let base = URL.applicationSupportDirectory
+        // CloudKit uses the default store path — specifying a custom URL breaks it on some
+        // SwiftData versions. Local fallback uses a different path to avoid conflicts.
+        let cloudConfig = ModelConfiguration(schema: schema, cloudKitDatabase: .private("iCloud.com.TannerTracker"))
+        let localConfig = ModelConfiguration(
+            schema: schema,
+            url: base.appending(path: "local.store"),
+            cloudKitDatabase: .none
+        )
+
+        // 1. Happy path — CloudKit available.
         if let container = try? ModelContainer(for: schema, configurations: [cloudConfig]) {
-            return container
+            return (container, true)
         }
-        // Schema mismatch or corrupt store — wipe and retry with CloudKit.
-        wipeDefaultStore()
-        if let container = try? ModelContainer(for: schema, configurations: [cloudConfig]) {
-            return container
+
+        // 2. CloudKit unavailable — fall back to the separate local store file.
+        //    No conflict possible since they're different paths.
+        if let container = try? ModelContainer(for: schema, configurations: [localConfig]) {
+            return (container, false)
         }
-        // CloudKit unavailable (simulator, no iCloud account, etc.) — fall back to local store.
-        let localConfig = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
+
+        // 3. Local store corrupt/incompatible — wipe only the local store and retry.
+        wipeStore(at: base.appending(path: "local.store"))
         do {
-            return try ModelContainer(for: schema, configurations: [localConfig])
+            return (try ModelContainer(for: schema, configurations: [localConfig]), false)
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
     }
 
-    private static func wipeDefaultStore() {
-        let base = URL.applicationSupportDirectory
-        for name in ["default.store", "default.store-shm", "default.store-wal"] {
-            try? FileManager.default.removeItem(at: base.appending(path: name))
+    private static func wipeStore(at url: URL) {
+        let path = url.path
+        for suffix in ["", "-shm", "-wal"] {
+            try? FileManager.default.removeItem(atPath: path + suffix)
         }
     }
 }

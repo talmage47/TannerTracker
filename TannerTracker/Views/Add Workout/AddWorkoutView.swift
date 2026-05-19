@@ -26,18 +26,36 @@ struct AddWorkoutView: View {
         allEntries.first { Calendar.current.isDate($0.date, inSameDayAs: date) }
     }
 
-    private static let weightValues: [Double] = {
+    private static let weightValuesLbs: [Double] = {
         var values: [Double] = [0]
         values += stride(from: 2.5, through: 20, by: 2.5).map { $0 }
         values += stride(from: 25, through: 1000, by: 5).map { $0 }
         return values
     }()
 
+    private static let weightValuesKg: [Double] = {
+        var values: [Double] = [0]
+        values += stride(from: 1, through: 20, by: 1).map { $0 }
+        values += stride(from: 22.5, through: 500, by: 2.5).map { $0 }
+        return values
+    }()
+
+    private var pickerWeightValues: [Double] {
+        settings.isMetric ? Self.weightValuesKg : Self.weightValuesLbs
+    }
+
+    private static func nearestPickerValue(_ value: Double, isMetric: Bool) -> Double {
+        let values = isMetric ? weightValuesKg : weightValuesLbs
+        return values.min(by: { abs($0 - value) < abs($1 - value) }) ?? value
+    }
+
     init(editingEntry: WorkoutEntry? = nil, date: Date = Date()) {
         self.editingEntry = editingEntry
         self.date = date
         _selectedExercise = State(initialValue: editingEntry.flatMap { $0.exercise })
-        _weight = State(initialValue: editingEntry?.weight ?? 0)
+        let s = AppSettings.shared
+        let displayVal = s.displayWeight(editingEntry?.weight ?? 0)
+        _weight = State(initialValue: Self.nearestPickerValue(displayVal, isMetric: s.isMetric))
         _reps = State(initialValue: editingEntry?.reps ?? 10)
         _sets = State(initialValue: editingEntry?.sets ?? 3)
     }
@@ -76,7 +94,8 @@ struct AddWorkoutView: View {
             defaultsApplied = true
             if let last = lastEntryForDate {
                 selectedExercise = last.exercise
-                weight = last.weight
+                let displayVal = settings.displayWeight(last.weight)
+                weight = Self.nearestPickerValue(displayVal, isMetric: settings.isMetric)
                 reps = last.reps
                 sets = last.sets
             }
@@ -123,7 +142,7 @@ struct AddWorkoutView: View {
                 Spacer()
 
                 Picker("Weight", selection: $weight) {
-                    ForEach(Self.weightValues, id: \.self) { val in
+                    ForEach(pickerWeightValues, id: \.self) { val in
                         Text(formatWeight(val)).tag(val)
                     }
                 }
@@ -217,15 +236,16 @@ struct AddWorkoutView: View {
     }
 
     private func save() {
+        let storageWeight = settings.toStorageLbs(weight)
         if let entry = editingEntry {
             entry.exercise = selectedExercise
-            entry.weight = weight
+            entry.weight = storageWeight
             entry.reps = reps
             entry.sets = sets
         } else {
             let entry = WorkoutEntry(
                 exercise: selectedExercise,
-                weight: weight,
+                weight: storageWeight,
                 reps: reps,
                 sets: sets,
                 date: date

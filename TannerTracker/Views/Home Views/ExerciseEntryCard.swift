@@ -11,10 +11,15 @@ struct ExerciseEntryCard: View {
     let entries: [WorkoutEntry]
     let unitLabel: String
     let accentColor: Color
+    let isMetric: Bool
     var isEditing: Bool
     var onTap: (WorkoutEntry) -> Void
     var onDelete: (WorkoutEntry) -> Void
     @Binding var expandedEntryID: WorkoutEntry.ID?
+
+    private func displayedWeight(_ lbs: Double) -> Double {
+        isMetric ? lbs / 2.20462 : lbs
+    }
 
     private func formatWeight(_ value: Double) -> String {
         value.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(value))" : String(format: "%.1f", value)
@@ -88,7 +93,7 @@ struct ExerciseEntryCard: View {
                             }
 
                             HStack(spacing: 14) {
-                                WorkoutStatBadge(value: "\(formatWeight(entry.weight)) \(unitLabel)", icon: "scalemass.fill")
+                                WorkoutStatBadge(value: "\(formatWeight(displayedWeight(entry.weight))) \(unitLabel)", icon: "scalemass.fill")
                                 WorkoutStatBadge(value: "\(entry.reps) reps", icon: "repeat")
                                 WorkoutStatBadge(value: "\(entry.sets) sets", icon: "square.stack.fill")
                             }

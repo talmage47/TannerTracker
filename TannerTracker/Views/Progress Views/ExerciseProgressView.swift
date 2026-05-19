@@ -58,6 +58,10 @@ struct ExerciseProgressView: View {
         allEntries.filter { $0.exercise?.persistentModelID == exercise.persistentModelID }
     }
 
+    private func dw(_ lbs: Double) -> Double {
+        settings.isMetric ? lbs / 2.20462 : lbs
+    }
+
     private func epleyValue(weight: Double, reps: Int) -> Double {
         weight * (1 + Double(reps) / 30.0)
     }
@@ -82,8 +86,8 @@ struct ExerciseProgressView: View {
             }) else { return nil }
             return DayEpley(
                 date: day,
-                value: epleyValue(weight: best.weight, reps: best.reps),
-                weight: best.weight,
+                value: dw(epleyValue(weight: best.weight, reps: best.reps)),
+                weight: dw(best.weight),
                 reps: best.reps
             )
         }
@@ -100,7 +104,7 @@ struct ExerciseProgressView: View {
     private var maxWeightByReps: [RepMax] {
         let grouped = Dictionary(grouping: exerciseEntries) { $0.reps }
         return grouped.map { reps, entries in
-            RepMax(reps: reps, maxWeight: entries.map(\.weight).max() ?? 0)
+            RepMax(reps: reps, maxWeight: dw(entries.map(\.weight).max() ?? 0))
         }
         .sorted { $0.reps < $1.reps }
     }
@@ -115,7 +119,7 @@ struct ExerciseProgressView: View {
         let grouped = Dictionary(grouping: filtered) { calendar.startOfDay(for: $0.date) }
         return grouped.compactMap { day, entries in
             guard let best = entries.max(by: { $0.weight < $1.weight }) else { return nil }
-            return DayEpley(date: day, value: best.weight, weight: best.weight, reps: best.reps)
+            return DayEpley(date: day, value: dw(best.weight), weight: dw(best.weight), reps: best.reps)
         }
         .sorted { $0.date < $1.date }
     }

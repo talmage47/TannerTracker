@@ -12,7 +12,7 @@ class Exercise {
     var createdAt: Date = Date()
     var isRemoved: Bool = false
     @Relationship(deleteRule: .cascade, inverse: \WorkoutEntry.exercise)
-    var entries: [WorkoutEntry] = []
+    var entries: [WorkoutEntry]?
 
     init(name: String) {
         self.name = name

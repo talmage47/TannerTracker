@@ -30,8 +30,16 @@ class AppSettings {
         set { accentColorHex = newValue.toHex() }
     }
 
-    var unitLabel: String {
-        unitSystem == "imperial" ? "lbs" : "kg"
+    var isMetric: Bool { unitSystem == "metric" }
+
+    var unitLabel: String { isMetric ? "kg" : "lbs" }
+
+    func displayWeight(_ lbs: Double) -> Double {
+        isMetric ? lbs / 2.20462 : lbs
+    }
+
+    func toStorageLbs(_ value: Double) -> Double {
+        isMetric ? value * 2.20462 : value
     }
 
     private init() {
