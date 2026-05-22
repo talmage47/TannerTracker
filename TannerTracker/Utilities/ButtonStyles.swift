@@ -40,3 +40,31 @@ extension View {
         modifier(PressHighlightListRow())
     }
 }
+
+// Scale up + haptic on long press completion. Apply only to views that support long press editing.
+private struct LongPressScaleModifier: ViewModifier {
+    @GestureState private var isPressing = false
+    @State private var hapticTrigger = false
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isPressing ? 1.04 : 1.0)
+            .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isPressing)
+            .sensoryFeedback(.impact(weight: .medium), trigger: hapticTrigger)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .updating($isPressing) { value, state, _ in state = value }
+                    .onEnded { _ in
+                        hapticTrigger.toggle()
+                        action()
+                    }
+            )
+    }
+}
+
+extension View {
+    func longPressWithScaleAndHaptic(action: @escaping () -> Void) -> some View {
+        modifier(LongPressScaleModifier(action: action))
+    }
+}

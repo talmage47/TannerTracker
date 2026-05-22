@@ -12,9 +12,8 @@ struct SettingsView: View {
     @Environment(AppSettings.self) var settings
 
     @State private var accentColor: Color = AppSettings.shared.accentColor
-    @State private var showWorkoutList = false
+    @State private var showExerciseList = false
     @State private var showRemovedExercises = false
-    @State private var dummySelectedExercise: Exercise? = nil
 
 
     var body: some View {
@@ -82,10 +81,10 @@ struct SettingsView: View {
                     // Exercises
                     Section {
                         Button {
-                            showWorkoutList = true
+                            showExerciseList = true
                         } label: {
                             HStack {
-                                Text("Workout List")
+                                Text("Exercise List")
                                     .foregroundStyle(.white)
                                 Spacer()
                                 Image(systemName: "chevron.right")
@@ -164,8 +163,8 @@ struct SettingsView: View {
                 accentColor = settings.accentColor
             }
         }
-        .sheet(isPresented: $showWorkoutList) {
-            ExerciseSelectorView(selectedExercise: $dummySelectedExercise)
+        .sheet(isPresented: $showExerciseList) {
+            ExerciseSettingsList()
         }
         .sheet(isPresented: $showRemovedExercises) {
             RemovedExercisesView()

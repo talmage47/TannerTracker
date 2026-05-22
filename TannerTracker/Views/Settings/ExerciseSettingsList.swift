@@ -1,26 +1,23 @@
 //
-//  ExerciseSelectorView.swift
+//  ExerciseSettingsList.swift
 //  TannerTracker
 //
 
 import SwiftUI
-import SwiftData
 
-struct ExerciseSelectorView: View {
+struct ExerciseSettingsList: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppSettings.self) var settings
 
-    @Binding var selectedExercise: Exercise?
-
     var body: some View {
         NavigationStack {
-            ExerciseList(selectedExercise: $selectedExercise, onRowTap: { _ in dismiss() })
-                .navigationTitle("Select Exercise")
+            ExerciseList()
+                .navigationTitle("Exercise List")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Cancel") { dismiss() }
-                            .foregroundStyle(.gray)
+                        Button("Done") { dismiss() }
+                            .foregroundStyle(settings.accentColor)
                     }
                 }
         }
