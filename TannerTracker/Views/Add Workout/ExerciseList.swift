@@ -55,67 +55,89 @@ struct ExerciseList: View {
         ZStack {
             Color(hex: "#1A1A1A").ignoresSafeArea()
 
-            List {
-                ForEach(filteredExercises) { exercise in
-                    HStack {
-                        Text(exercise.name)
-                            .foregroundStyle(.white)
-                        Spacer()
-                        if showChevron {
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(.gray)
-                                .font(.caption.weight(.semibold))
-                        } else if selectedExercise?.wrappedValue?.persistentModelID == exercise.persistentModelID {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(settings.accentColor)
-                                .fontWeight(.semibold)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(filteredExercises.enumerated()), id: \.element.id) { index, exercise in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.08))
+                                .frame(height: 1)
                         }
-                    }
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(TapGesture().onEnded {
-                        guard let onRowTap else { return }
-                        selectedExercise?.wrappedValue = exercise
-                        onRowTap(exercise)
-                    })
-                    .longPressWithScaleAndHaptic {
-                        editingExercise = exercise
-                        editingName = exercise.name
-                    }
-                    .listRowPressHighlight()
-                    .listRowSeparatorTint(Color.white.opacity(0.08))
-                }
 
-                if !searchText.isEmpty && !hasExactMatch {
-                    Button {
-                        addExercise(name: searchText)
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(settings.accentColor)
-                            Text("Add \"\(searchText)\"")
-                                .foregroundStyle(settings.accentColor)
+                        HStack {
+                            Text(exercise.name)
+                                .foregroundStyle(.white)
+                            Spacer()
+                            if showChevron {
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.gray)
+                                    .font(.caption.weight(.semibold))
+                            } else if selectedExercise?.wrappedValue?.persistentModelID == exercise.persistentModelID {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(settings.accentColor)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .frame(maxWidth: .infinity)
+                        .background(Color(hex: "#242424"))
+                        .pressHighlight()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            guard let onRowTap else { return }
+                            selectedExercise?.wrappedValue = exercise
+                            onRowTap(exercise)
+                        }
+                        .longPressWithScaleAndHaptic {
+                            editingExercise = exercise
+                            editingName = exercise.name
                         }
                     }
-                    .listRowBackground(Color(hex: "#242424"))
-                    .listRowSeparatorTint(Color.white.opacity(0.08))
-                } else if searchText.isEmpty {
-                    Button {
-                        searchFocused = false
-                        showNewExercisePopup = true
-                        nameFieldFocused = true
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(settings.accentColor)
-                            Text("Create New Exercise")
-                                .foregroundStyle(settings.accentColor)
+
+                    if !searchText.isEmpty && !hasExactMatch {
+                        if !filteredExercises.isEmpty {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.08))
+                                .frame(height: 1)
                         }
+                        Button { addExercise(name: searchText) } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(settings.accentColor)
+                                Text("Add \"\(searchText)\"")
+                                    .foregroundStyle(settings.accentColor)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .background(Color(hex: "#242424"))
+                    } else if searchText.isEmpty {
+                        if !filteredExercises.isEmpty {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.08))
+                                .frame(height: 1)
+                        }
+                        Button {
+                            searchFocused = false
+                            showNewExercisePopup = true
+                            nameFieldFocused = true
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundStyle(settings.accentColor)
+                                Text("Create New Exercise")
+                                    .foregroundStyle(settings.accentColor)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .background(Color(hex: "#242424"))
                     }
-                    .listRowBackground(Color(hex: "#242424"))
-                    .listRowSeparatorTint(Color.white.opacity(0.08))
                 }
             }
-            .scrollContentBackground(.hidden)
             .scrollDismissesKeyboard(.immediately)
 
             if showNewExercisePopup { newExerciseOverlay }

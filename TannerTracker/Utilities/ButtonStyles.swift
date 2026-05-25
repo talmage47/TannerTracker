@@ -41,6 +41,26 @@ extension View {
     }
 }
 
+// For ScrollView/LazyVStack rows — overlays the highlight directly instead of using listRowBackground.
+private struct PressHighlightView: ViewModifier {
+    @GestureState private var isPressed = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(isPressed ? Color.white.opacity(0.08) : Color.clear)
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: .infinity)
+                    .updating($isPressed) { value, state, _ in state = value }
+            )
+    }
+}
+
+extension View {
+    func pressHighlight() -> some View {
+        modifier(PressHighlightView())
+    }
+}
+
 // Scale up + haptic on long press completion. Apply only to views that support long press editing.
 private struct LongPressScaleModifier: ViewModifier {
     @GestureState private var isPressing = false
