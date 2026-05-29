@@ -41,50 +41,73 @@ extension View {
     }
 }
 
-// For ScrollView/LazyVStack rows — overlays the highlight directly instead of using listRowBackground.
-private struct PressHighlightView: ViewModifier {
-    @GestureState private var isPressed = false
+// Handles tap + long press for ScrollView/LazyVStack rows without blocking scroll.
+// Uses Button (which has native scroll-deferral in UIKit) for tap recognition.
+// Long press is detected via ButtonStyle.isPressed + a Timer — no extra gesture
+// recognizers that would interfere with ScrollView's pan gesture.
+// The longPressActivated flag in ExerciseRowModifier prevents the Button's tap
+// action from firing after a long press completes.
+private struct ExerciseRowButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let onLongPress: () -> Void
 
-    func body(content: Content) -> some View {
-        content
-            .overlay(isPressed ? Color.white.opacity(0.08) : Color.clear)
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: .infinity)
-                    .updating($isPressed) { value, state, _ in state = value }
-            )
-    }
-}
+    @State private var timer: Timer? = nil
 
-extension View {
-    func pressHighlight() -> some View {
-        modifier(PressHighlightView())
-    }
-}
-
-// Scale up + haptic on long press completion. Apply only to views that support long press editing.
-private struct LongPressScaleModifier: ViewModifier {
-    @GestureState private var isPressing = false
-    @State private var hapticTrigger = false
-    let action: () -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .scaleEffect(isPressing ? 1.04 : 1.0)
-            .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isPressing)
-            .sensoryFeedback(.impact(weight: .medium), trigger: hapticTrigger)
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 0.5)
-                    .updating($isPressing) { value, state, _ in state = value }
-                    .onEnded { _ in
-                        hapticTrigger.toggle()
-                        action()
+    var body: some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 1.02 : 1.0)
+            .background(configuration.isPressed ? Color.white.opacity(0.08) : Color.clear)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, isPressed in
+                if isPressed {
+                    timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
+                        onLongPress()
                     }
-            )
+                } else {
+                    timer?.invalidate()
+                    timer = nil
+                }
+            }
+    }
+}
+
+private struct ExerciseRowButtonStyle: ButtonStyle {
+    let onLongPress: () -> Void
+
+    func makeBody(configuration: Configuration) -> some View {
+        ExerciseRowButtonBody(configuration: configuration, onLongPress: onLongPress)
+    }
+}
+
+private struct ExerciseRowModifier: ViewModifier {
+    let onTap: () -> Void
+    let onLongPress: () -> Void
+
+    @State private var longPressActivated = false
+    @State private var hapticTrigger = false
+
+    func body(content: Content) -> some View {
+        Button {
+            if !longPressActivated {
+                onTap()
+            }
+            longPressActivated = false
+        } label: {
+            content
+        }
+        .buttonStyle(ExerciseRowButtonStyle(
+            onLongPress: {
+                longPressActivated = true
+                hapticTrigger.toggle()
+                onLongPress()
+            }
+        ))
+        .sensoryFeedback(.impact(weight: .medium), trigger: hapticTrigger)
     }
 }
 
 extension View {
-    func longPressWithScaleAndHaptic(action: @escaping () -> Void) -> some View {
-        modifier(LongPressScaleModifier(action: action))
+    func exerciseRowGestures(onTap: @escaping () -> Void, onLongPress: @escaping () -> Void) -> some View {
+        modifier(ExerciseRowModifier(onTap: onTap, onLongPress: onLongPress))
     }
 }

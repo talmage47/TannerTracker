@@ -1,4 +1,3 @@
-//
 //  ExerciseList.swift
 //  TannerTracker
 //
@@ -57,15 +56,14 @@ struct ExerciseList: View {
 
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(filteredExercises.enumerated()), id: \.element.id) { index, exercise in
-                        if index > 0 {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.08))
-                                .frame(height: 1)
-                        }
+                    Rectangle()
+                        .fill(Color.white.opacity(0.15))
+                        .frame(height: 1)
 
+                    ForEach(filteredExercises) { exercise in
                         HStack {
                             Text(exercise.name)
+                                .font(.system(size: 18))
                                 .foregroundStyle(.white)
                             Spacer()
                             if showChevron {
@@ -78,29 +76,29 @@ struct ExerciseList: View {
                                     .fontWeight(.semibold)
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
+                        .padding(.leading, 20)
+                        .padding(.trailing, 16)
+                        .padding(.vertical, 16)
                         .frame(maxWidth: .infinity)
-                        .background(Color(hex: "#242424"))
-                        .pressHighlight()
                         .contentShape(Rectangle())
-                        .onTapGesture {
-                            guard let onRowTap else { return }
-                            selectedExercise?.wrappedValue = exercise
-                            onRowTap(exercise)
-                        }
-                        .longPressWithScaleAndHaptic {
-                            editingExercise = exercise
-                            editingName = exercise.name
-                        }
+                        .exerciseRowGestures(
+                            onTap: {
+                                guard let onRowTap else { return }
+                                selectedExercise?.wrappedValue = exercise
+                                onRowTap(exercise)
+                            },
+                            onLongPress: {
+                                editingExercise = exercise
+                                editingName = exercise.name
+                            }
+                        )
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.15))
+                            .frame(height: 1)
                     }
 
                     if !searchText.isEmpty && !hasExactMatch {
-                        if !filteredExercises.isEmpty {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.08))
-                                .frame(height: 1)
-                        }
                         Button { addExercise(name: searchText) } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: "plus.circle.fill")
@@ -111,14 +109,10 @@ struct ExerciseList: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 14)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        .background(Color(hex: "#242424"))
+                        .buttonStyle(ListRowButtonStyle())
                     } else if searchText.isEmpty {
-                        if !filteredExercises.isEmpty {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.08))
-                                .frame(height: 1)
-                        }
                         Button {
                             searchFocused = false
                             showNewExercisePopup = true
@@ -133,8 +127,9 @@ struct ExerciseList: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 14)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        .background(Color(hex: "#242424"))
+                        .buttonStyle(ListRowButtonStyle())
                     }
                 }
             }
