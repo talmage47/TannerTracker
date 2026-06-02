@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
@@ -14,6 +15,10 @@ struct SettingsView: View {
     @State private var accentColor: Color = AppSettings.shared.accentColor
     @State private var showExerciseList = false
     @State private var showRemovedExercises = false
+    @State private var showExportOptions = false
+    @State private var showExporter = false
+    @State private var exportFormat: ExportFormat? = nil
+    @State private var exportDocument: ExportDocument? = nil
 
 
     var body: some View {
@@ -116,6 +121,28 @@ struct SettingsView: View {
                             .foregroundStyle(.gray)
                     }
 
+                    // Export
+                    Section {
+                        Button {
+                            showExportOptions = true
+                        } label: {
+                            HStack {
+                                Text("Export Data")
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Image(systemName: "square.and.arrow.up")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.gray)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(ListRowButtonStyle())
+                        .listRowBackground(Color(hex: "#242424"))
+                    } header: {
+                        Text("Export")
+                            .foregroundStyle(.gray)
+                    }
+
                     #if DEBUG
                     Section {
                         Button {
@@ -170,6 +197,72 @@ struct SettingsView: View {
         .sheet(isPresented: $showRemovedExercises) {
             RemovedExercisesView()
         }
+        .confirmationDialog("Export Format", isPresented: $showExportOptions) {
+            Button("JSON") {
+                exportFormat = .json
+                exportDocument = ExportDocument(generateJSON())
+                showExporter = true
+            }
+            Button("CSV") {
+                exportFormat = .csv
+                exportDocument = ExportDocument(generateCSV())
+                showExporter = true
+            }
+        }
+        .fileExporter(
+            isPresented: $showExporter,
+            document: exportDocument,
+            contentType: exportFormat?.contentType ?? .json,
+            defaultFilename: exportFilename(extension: exportFormat?.fileExtension ?? "json")
+        ) { _ in
+            exportDocument = nil
+            exportFormat = nil
+        }
+    }
+
+    // MARK: - Export
+
+    private func exportFilename(extension ext: String) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return "TannerTracker-\(formatter.string(from: Date())).\(ext)"
+    }
+
+    private func fetchSortedEntries() -> [WorkoutEntry] {
+        let descriptor = FetchDescriptor<WorkoutEntry>(sortBy: [SortDescriptor(\WorkoutEntry.date), SortDescriptor(\WorkoutEntry.time)])
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func generateJSON() -> String {
+        let entries = fetchSortedEntries()
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dicts: [[String: Any]] = entries.map { entry in
+            [
+                "date": dateFormatter.string(from: entry.date),
+                "exercise": entry.exercise?.name ?? "",
+                "weight_\(settings.unitLabel)": settings.displayWeight(entry.weight),
+                "reps": entry.reps,
+                "sets": entry.sets
+            ]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dicts, options: .prettyPrinted) else { return "[]" }
+        return String(data: data, encoding: .utf8) ?? "[]"
+    }
+
+    private func generateCSV() -> String {
+        let entries = fetchSortedEntries()
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        var lines = ["Date,Exercise,Weight (\(settings.unitLabel)),Reps,Sets"]
+        for entry in entries {
+            let date = dateFormatter.string(from: entry.date)
+            let exercise = (entry.exercise?.name ?? "").replacingOccurrences(of: "\"", with: "\"\"")
+            let weight = settings.displayWeight(entry.weight)
+            let weightStr = weight.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(weight))" : String(format: "%.1f", weight)
+            lines.append("\(date),\"\(exercise)\",\(weightStr),\(entry.reps),\(entry.sets)")
+        }
+        return lines.joined(separator: "\n")
     }
 
     #if DEBUG
@@ -246,6 +339,25 @@ struct SettingsView: View {
     #endif
 }
 
+
+enum ExportFormat {
+    case json, csv
+    var contentType: UTType { self == .json ? .json : .commaSeparatedText }
+    var fileExtension: String { self == .json ? "json" : "csv" }
+}
+
+struct ExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [] }
+    static var writableContentTypes: [UTType] { [.json, .commaSeparatedText] }
+    let content: String
+
+    init(_ content: String) { self.content = content }
+    init(configuration: ReadConfiguration) throws { content = "" }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(content.utf8))
+    }
+}
 
 #Preview {
     SettingsView()

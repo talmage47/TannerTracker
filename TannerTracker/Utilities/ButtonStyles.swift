@@ -51,21 +51,34 @@ private struct ExerciseRowButtonBody: View {
     let configuration: ButtonStyleConfiguration
     let onLongPress: () -> Void
 
-    @State private var timer: Timer? = nil
+    @State private var longPressTimer: Timer? = nil
+    @State private var scaleTimer: Timer? = nil
+    @State private var hapticTimer: Timer? = nil
+    @State private var isScaled = false
+    @State private var hapticTrigger = false
 
     var body: some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 1.02 : 1.0)
+            .scaleEffect(isScaled ? 1.02 : 1.0)
             .background(configuration.isPressed ? Color.white.opacity(0.08) : Color.clear)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isScaled)
+            .sensoryFeedback(.impact(weight: .medium), trigger: hapticTrigger)
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed {
-                    timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
+                    scaleTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { _ in
+                        isScaled = true
+                    }
+                    hapticTimer = Timer.scheduledTimer(withTimeInterval: 0.35, repeats: false) { _ in
+                        hapticTrigger.toggle()
+                    }
+                    longPressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
                         onLongPress()
                     }
                 } else {
-                    timer?.invalidate()
-                    timer = nil
+                    scaleTimer?.invalidate(); scaleTimer = nil
+                    hapticTimer?.invalidate(); hapticTimer = nil
+                    longPressTimer?.invalidate(); longPressTimer = nil
+                    isScaled = false
                 }
             }
     }
@@ -84,7 +97,6 @@ private struct ExerciseRowModifier: ViewModifier {
     let onLongPress: () -> Void
 
     @State private var longPressActivated = false
-    @State private var hapticTrigger = false
 
     func body(content: Content) -> some View {
         Button {
@@ -98,11 +110,9 @@ private struct ExerciseRowModifier: ViewModifier {
         .buttonStyle(ExerciseRowButtonStyle(
             onLongPress: {
                 longPressActivated = true
-                hapticTrigger.toggle()
                 onLongPress()
             }
         ))
-        .sensoryFeedback(.impact(weight: .medium), trigger: hapticTrigger)
     }
 }
 
