@@ -20,12 +20,12 @@ struct ExerciseList: View {
     @State private var showNewExercisePopup = false
     @State private var newExerciseName = ""
     @FocusState private var nameFieldFocused: Bool
+    @FocusState private var searchFocused: Bool
 
     @State private var editingExercise: Exercise? = nil
     @State private var editingName = ""
+    @State private var showEditAlert = false
     @State private var showRemoveWarning = false
-    @FocusState private var editFieldFocused: Bool
-    @FocusState private var searchFocused: Bool
 
     private var filteredExercises: [Exercise] {
         guard !searchText.isEmpty else { return exercises }
@@ -88,8 +88,10 @@ struct ExerciseList: View {
                                 onRowTap(exercise)
                             },
                             onLongPress: {
+                                searchFocused = false
                                 editingExercise = exercise
                                 editingName = exercise.name
+                                showEditAlert = true
                             }
                         )
 
@@ -136,15 +138,14 @@ struct ExerciseList: View {
             .scrollDismissesKeyboard(.immediately)
 
             if showNewExercisePopup { newExerciseOverlay }
-            if editingExercise != nil { editExerciseOverlay }
         }
         .safeAreaInset(edge: .bottom) { searchBar }
-        .onChange(of: editingExercise) { _, new in
-            if new != nil {
-                searchFocused = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    editFieldFocused = true
-                }
+        .alert("Edit Exercise", isPresented: $showEditAlert) {
+            TextField("Exercise name", text: $editingName)
+            Button("Save") { saveEdit() }
+            Button("Remove Exercise", role: .destructive) {
+                dismissEditPopup()
+                showRemoveWarning = true
             }
         }
         .alert("Remove Exercise", isPresented: $showRemoveWarning) {
@@ -152,10 +153,10 @@ struct ExerciseList: View {
                 editingExercise?.isRemoved = true
                 dismissEditPopup()
             }
-            Button("Cancel", role: .cancel) {}
         } message: {
             Text("This exercise will be removed from the list but can be recovered in Settings.")
         }
+        .tint(.blue)
     }
 
     // MARK: - Search Bar
@@ -250,57 +251,6 @@ struct ExerciseList: View {
         }
     }
 
-    // MARK: - Edit Exercise Overlay
-
-    private var editExerciseOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.55)
-                .ignoresSafeArea()
-                .onTapGesture { dismissEditPopup() }
-
-            VStack(spacing: 20) {
-                Text("Edit Exercise")
-                    .font(.title3.bold())
-                    .foregroundStyle(.white)
-
-                TextField("Exercise name", text: $editingName)
-                    .textFieldStyle(.plain)
-                    .focused($editFieldFocused)
-                    .padding(12)
-                    .background(Color.white.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .foregroundStyle(.white)
-                    .submitLabel(.done)
-                    .onSubmit { if canSaveEdit { saveEdit() } }
-
-                HStack(spacing: 12) {
-                    Button("Cancel") { dismissEditPopup() }
-                        .foregroundStyle(.gray)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                    Button("Save") { saveEdit() }
-                        .foregroundStyle(.white)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(canSaveEdit ? settings.accentColor : Color.gray.opacity(0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .disabled(!canSaveEdit)
-                }
-
-                Button("Remove Exercise") { showRemoveWarning = true }
-                    .foregroundStyle(.red)
-                    .font(.subheadline.weight(.medium))
-            }
-            .padding(24)
-            .glassEffect(in: RoundedRectangle(cornerRadius: 22))
-            .padding(.horizontal, 28)
-        }
-    }
-
     // MARK: - Actions
 
     private func addExercise(name: String) {
@@ -329,16 +279,16 @@ struct ExerciseList: View {
     }
 
     private func saveEdit() {
-        let trimmed = editingName.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, let exercise = editingExercise else { return }
-        exercise.name = trimmed
+        if canSaveEdit, let exercise = editingExercise {
+            exercise.name = editingName.trimmingCharacters(in: .whitespaces)
+        }
         dismissEditPopup()
     }
 
     private func dismissEditPopup() {
-        editFieldFocused = false
         editingExercise = nil
         editingName = ""
+        showEditAlert = false
         showRemoveWarning = false
     }
 }

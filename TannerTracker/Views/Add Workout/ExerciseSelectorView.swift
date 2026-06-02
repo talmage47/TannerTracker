@@ -20,7 +20,7 @@ struct ExerciseSelectorView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button("Cancel") { dismiss() }
-                            .foregroundStyle(.gray)
+                            .tint(.gray)
                     }
                 }
         }

@@ -7,12 +7,16 @@ import SwiftUI
 import SwiftData
 
 struct RemovedExercisesView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppSettings.self) var settings
+    @Environment(\.modelContext) private var modelContext
 
     @Query(filter: #Predicate<Exercise> { $0.isRemoved == true }, sort: \Exercise.name)
     private var removedExercises: [Exercise]
 
     @State private var editingExercise: Exercise? = nil
+    @State private var showActionAlert = false
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -28,86 +32,77 @@ struct RemovedExercisesView: View {
                             .foregroundStyle(.gray)
                     }
                 } else {
-                    List {
-                        ForEach(removedExercises) { exercise in
-                            HStack {
-                                Text(exercise.name)
-                                    .foregroundStyle(.white)
-                                Spacer()
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.15))
+                                .frame(height: 1)
+
+                            ForEach(removedExercises) { exercise in
+                                HStack {
+                                    Text(exercise.name)
+                                        .font(.system(size: 18))
+                                        .foregroundStyle(.white)
+                                    Spacer()
+                                }
+                                .padding(.leading, 20)
+                                .padding(.trailing, 16)
+                                .padding(.vertical, 16)
+                                .frame(maxWidth: .infinity)
+                                .contentShape(Rectangle())
+                                .exerciseRowGestures(
+                                    onTap: {
+                                        editingExercise = exercise
+                                        showActionAlert = true
+                                    },
+                                    onLongPress: {
+                                        editingExercise = exercise
+                                        showActionAlert = true
+                                    }
+                                )
+
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.15))
+                                    .frame(height: 1)
                             }
-                            .contentShape(Rectangle())
-                            .onLongPressGesture(minimumDuration: 0.5) {
-                                editingExercise = exercise
-                            }
-                            .listRowBackground(Color(hex: "#242424"))
-                            .listRowSeparatorTint(Color.white.opacity(0.08))
                         }
                     }
-                    .scrollContentBackground(.hidden)
-                }
-
-                if let exercise = editingExercise {
-                    actionOverlay(for: exercise)
                 }
             }
             .navigationTitle("Removed Exercises")
             .navigationBarTitleDisplayMode(.inline)
-        }
-        .presentationDragIndicator(.visible)
-    }
-
-    private func actionOverlay(for exercise: Exercise) -> some View {
-        ZStack {
-            Color.black.opacity(0.55)
-                .ignoresSafeArea()
-                .onTapGesture { editingExercise = nil }
-
-            VStack(spacing: 14) {
-                Text(exercise.name)
-                    .font(.title3.bold())
-                    .foregroundStyle(.white)
-                    .padding(.bottom, 4)
-
-                Button {
-                    exercise.isRemoved = false
-                    editingExercise = nil
-                } label: {
-                    Text("Recover Exercise")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-
-                Button {
-                    editingExercise = nil
-                } label: {
-                    Text("Delete Exercise")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.red)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-
-                Button {
-                    editingExercise = nil
-                } label: {
-                    Text("Cancel")
-                        .font(.headline)
-                        .foregroundStyle(.gray)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(settings.accentColor)
                 }
             }
-            .padding(24)
-            .glassEffect(in: RoundedRectangle(cornerRadius: 22))
-            .padding(.horizontal, 28)
+        }
+        .presentationDragIndicator(.visible)
+        .alert(editingExercise?.name ?? "", isPresented: $showActionAlert) {
+            Button("Recover Exercise") {
+                editingExercise?.isRemoved = false
+                editingExercise = nil
+            }
+            Button("Delete Exercise", role: .destructive) {
+                showDeleteConfirmation = true
+            }
+            Button("Cancel", role: .cancel) {
+                editingExercise = nil
+            }
+        }
+        .alert("Delete Exercise", isPresented: $showDeleteConfirmation) {
+            Button("Delete Permanently", role: .destructive) {
+                if let exercise = editingExercise {
+                    modelContext.delete(exercise)
+                }
+                editingExercise = nil
+            }
+            Button("Cancel", role: .cancel) {
+                editingExercise = nil
+            }
+        } message: {
+            Text("Deleting \"\(editingExercise?.name ?? "")\" will permanently remove it and all of its workout history. This cannot be undone.")
         }
     }
 }

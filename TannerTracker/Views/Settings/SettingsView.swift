@@ -93,8 +93,8 @@ struct SettingsView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .listRowPressHighlight()
+                        .buttonStyle(ListRowButtonStyle())
+                        .listRowBackground(Color(hex: "#242424"))
 
                         Button {
                             showRemovedExercises = true
@@ -109,8 +109,8 @@ struct SettingsView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .listRowPressHighlight()
+                        .buttonStyle(ListRowButtonStyle())
+                        .listRowBackground(Color(hex: "#242424"))
                     } header: {
                         Text("Exercises")
                             .foregroundStyle(.gray)
@@ -128,8 +128,8 @@ struct SettingsView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .listRowPressHighlight()
+                        .buttonStyle(ListRowButtonStyle())
+                        .listRowBackground(Color(hex: "#242424"))
 
                         Button {
                             wipeAllData()
@@ -141,8 +141,8 @@ struct SettingsView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .listRowPressHighlight()
+                        .buttonStyle(ListRowButtonStyle())
+                        .listRowBackground(Color(hex: "#242424"))
                     } header: {
                         Text("Developer")
                             .foregroundStyle(.gray)
@@ -163,6 +163,7 @@ struct SettingsView: View {
                 accentColor = settings.accentColor
             }
         }
+        .presentationDragIndicator(.visible)
         .sheet(isPresented: $showExerciseList) {
             ExerciseSettingsList()
         }
