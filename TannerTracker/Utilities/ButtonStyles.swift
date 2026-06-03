@@ -17,20 +17,28 @@ struct ListRowButtonStyle: ButtonStyle {
     }
 }
 
-// For native List rows — uses listRowBackground so the highlight covers the
-// full cell height (including UIKit's minimum row height), not just the label frame.
+// Bridges ButtonStyle.configuration.isPressed to a @State so listRowBackground
+// can reflect it — no gesture recognizers, so scroll and tap both work normally.
+private struct PressTrackingButtonStyle: ButtonStyle {
+    @Binding var isPressed: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .onChange(of: configuration.isPressed) { _, newValue in
+                withAnimation(.easeInOut(duration: 0.1)) { isPressed = newValue }
+            }
+    }
+}
+
 private struct PressHighlightListRow: ViewModifier {
-    @GestureState private var isPressed = false
+    @State private var isPressed = false
 
     func body(content: Content) -> some View {
         content
+            .buttonStyle(PressTrackingButtonStyle(isPressed: $isPressed))
             .listRowBackground(
                 Color(hex: "#242424")
                     .overlay(isPressed ? Color.white.opacity(0.08) : Color.clear)
-            )
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: .infinity)
-                    .updating($isPressed) { value, state, _ in state = value }
             )
     }
 }

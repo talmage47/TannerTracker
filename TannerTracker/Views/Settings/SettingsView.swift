@@ -19,6 +19,10 @@ struct SettingsView: View {
     @State private var showExporter = false
     @State private var exportFormat: ExportFormat? = nil
     @State private var exportDocument: ExportDocument? = nil
+    @State private var showImporter = false
+    @State private var importedCount = 0
+    @State private var importError: String? = nil
+    @State private var showImportResult = false
 
 
     var body: some View {
@@ -98,8 +102,7 @@ struct SettingsView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(ListRowButtonStyle())
-                        .listRowBackground(Color(hex: "#242424"))
+                        .listRowPressHighlight()
 
                         Button {
                             showRemovedExercises = true
@@ -114,14 +117,13 @@ struct SettingsView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(ListRowButtonStyle())
-                        .listRowBackground(Color(hex: "#242424"))
+                        .listRowPressHighlight()
                     } header: {
                         Text("Exercises")
                             .foregroundStyle(.gray)
                     }
 
-                    // Export
+                    // Data
                     Section {
                         Button {
                             showExportOptions = true
@@ -136,10 +138,24 @@ struct SettingsView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(ListRowButtonStyle())
-                        .listRowBackground(Color(hex: "#242424"))
+                        .listRowPressHighlight()
+
+                        Button {
+                            showImporter = true
+                        } label: {
+                            HStack {
+                                Text("Import Data")
+                                    .foregroundStyle(.white)
+                                Spacer()
+                                Image(systemName: "square.and.arrow.down")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.gray)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .listRowPressHighlight()
                     } header: {
-                        Text("Export")
+                        Text("Data")
                             .foregroundStyle(.gray)
                     }
 
@@ -155,8 +171,7 @@ struct SettingsView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(ListRowButtonStyle())
-                        .listRowBackground(Color(hex: "#242424"))
+                        .listRowPressHighlight()
 
                         Button {
                             wipeAllData()
@@ -168,8 +183,7 @@ struct SettingsView: View {
                             }
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(ListRowButtonStyle())
-                        .listRowBackground(Color(hex: "#242424"))
+                        .listRowPressHighlight()
                     } header: {
                         Text("Developer")
                             .foregroundStyle(.gray)
@@ -218,6 +232,25 @@ struct SettingsView: View {
             exportDocument = nil
             exportFormat = nil
         }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.json, .commaSeparatedText],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+        .alert(
+            importError != nil ? "Import Failed" : "Import Complete",
+            isPresented: $showImportResult
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            if let error = importError {
+                Text(error)
+            } else {
+                Text("Successfully imported \(importedCount) \(importedCount == 1 ? "entry" : "entries").")
+            }
+        }
     }
 
     // MARK: - Export
@@ -263,6 +296,145 @@ struct SettingsView: View {
             lines.append("\(date),\"\(exercise)\",\(weightStr),\(entry.reps),\(entry.sets)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Import
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure(let error):
+            importError = error.localizedDescription
+            showImportResult = true
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            guard url.startAccessingSecurityScopedResource() else {
+                importError = "Permission denied for the selected file."
+                showImportResult = true
+                return
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
+            do {
+                let data = try Data(contentsOf: url)
+                let ext = url.pathExtension.lowercased()
+                importedCount = ext == "csv" ? try importCSV(data) : try importJSON(data)
+                importError = nil
+            } catch {
+                importError = error.localizedDescription
+            }
+            showImportResult = true
+        }
+    }
+
+    private func entryKey(name: String, dateStr: String, weightLbs: Double, reps: Int, sets: Int) -> String {
+        "\(name)|\(dateStr)|\(String(format: "%.1f", weightLbs))|\(reps)|\(sets)"
+    }
+
+    private func buildExistingKeys(dateFormatter: DateFormatter) -> Set<String> {
+        let entries = (try? modelContext.fetch(FetchDescriptor<WorkoutEntry>())) ?? []
+        return Set(entries.compactMap { entry -> String? in
+            guard let name = entry.exercise?.name else { return nil }
+            return entryKey(name: name, dateStr: dateFormatter.string(from: entry.date), weightLbs: entry.weight, reps: entry.reps, sets: entry.sets)
+        })
+    }
+
+    private func importJSON(_ data: Data) throws -> Int {
+        guard let array = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            throw ImportError.invalidFormat
+        }
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let existing = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
+        var exerciseMap = Dictionary(uniqueKeysWithValues: existing.map { ($0.name, $0) })
+        var seenKeys = buildExistingKeys(dateFormatter: dateFormatter)
+        var count = 0
+        for dict in array {
+            guard let dateStr = dict["date"] as? String,
+                  let date = dateFormatter.date(from: dateStr),
+                  let exerciseName = dict["exercise"] as? String,
+                  let reps = dict["reps"] as? Int,
+                  let sets = dict["sets"] as? Int else { continue }
+            let weightLbs: Double
+            if let w = dict["weight_lbs"] as? Double {
+                weightLbs = w
+            } else if let w = dict["weight_kg"] as? Double {
+                weightLbs = w * 2.20462
+            } else { continue }
+            let key = entryKey(name: exerciseName, dateStr: dateStr, weightLbs: weightLbs, reps: reps, sets: sets)
+            guard !seenKeys.contains(key) else { continue }
+            seenKeys.insert(key)
+            let exercise = exerciseMap[exerciseName] ?? {
+                let ex = Exercise(name: exerciseName)
+                modelContext.insert(ex)
+                exerciseMap[exerciseName] = ex
+                return ex
+            }()
+            modelContext.insert(WorkoutEntry(exercise: exercise, weight: weightLbs, reps: reps, sets: sets, date: date))
+            count += 1
+        }
+        return count
+    }
+
+    private func importCSV(_ data: Data) throws -> Int {
+        guard let content = String(data: data, encoding: .utf8) else { throw ImportError.invalidFormat }
+        var lines = content.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard lines.count > 1 else { return 0 }
+        let header = lines.removeFirst()
+        let isMetric = header.contains("(kg)")
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let existing = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
+        var exerciseMap = Dictionary(uniqueKeysWithValues: existing.map { ($0.name, $0) })
+        var seenKeys = buildExistingKeys(dateFormatter: dateFormatter)
+        var count = 0
+        for line in lines {
+            let fields = parseCSVLine(line)
+            guard fields.count >= 5,
+                  let date = dateFormatter.date(from: fields[0]),
+                  let weightVal = Double(fields[2]),
+                  let reps = Int(fields[3]),
+                  let sets = Int(fields[4]) else { continue }
+            let exerciseName = fields[1]
+            let weightLbs = isMetric ? weightVal * 2.20462 : weightVal
+            let key = entryKey(name: exerciseName, dateStr: fields[0], weightLbs: weightLbs, reps: reps, sets: sets)
+            guard !seenKeys.contains(key) else { continue }
+            seenKeys.insert(key)
+            let exercise = exerciseMap[exerciseName] ?? {
+                let ex = Exercise(name: exerciseName)
+                modelContext.insert(ex)
+                exerciseMap[exerciseName] = ex
+                return ex
+            }()
+            modelContext.insert(WorkoutEntry(exercise: exercise, weight: weightLbs, reps: reps, sets: sets, date: date))
+            count += 1
+        }
+        return count
+    }
+
+    private func parseCSVLine(_ line: String) -> [String] {
+        var fields: [String] = []
+        var current = ""
+        var inQuotes = false
+        var i = line.startIndex
+        while i < line.endIndex {
+            let c = line[i]
+            let next = line.index(after: i)
+            if c == "\"" {
+                if inQuotes && next < line.endIndex && line[next] == "\"" {
+                    current.append("\"")
+                    i = line.index(after: next)
+                    continue
+                }
+                inQuotes.toggle()
+            } else if c == "," && !inQuotes {
+                fields.append(current)
+                current = ""
+            } else {
+                current.append(c)
+            }
+            i = next
+        }
+        fields.append(current)
+        return fields
     }
 
     #if DEBUG
@@ -339,6 +511,11 @@ struct SettingsView: View {
     #endif
 }
 
+
+enum ImportError: LocalizedError {
+    case invalidFormat
+    var errorDescription: String? { "The file could not be parsed. Make sure it was exported from TannerTracker." }
+}
 
 enum ExportFormat {
     case json, csv
