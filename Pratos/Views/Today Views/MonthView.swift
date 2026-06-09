@@ -9,7 +9,7 @@ import SwiftData
 struct MonthView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppSettings.self) var settings
-    @Query(sort: \WorkoutEntry.date) private var allEntries: [WorkoutEntry]
+    @Query(sort: \ExerciseSet.performedAt) private var allEntries: [ExerciseSet]
 
     var initialDate: Date = Date()
     var onDateSelected: (Date) -> Void = { _ in }
@@ -18,7 +18,7 @@ struct MonthView: View {
 
     private var datesWithWorkouts: Set<DateComponents> {
         Set(allEntries.map {
-            Calendar.current.dateComponents([.year, .month, .day], from: $0.date)
+            Calendar.current.dateComponents([.year, .month, .day], from: $0.performedAt)
         })
     }
 

@@ -1,19 +1,19 @@
 //
-//  AddEntryView.swift
+//  AddSetsView.swift
 //  Pratos
 //
 
 import SwiftUI
 import SwiftData
 
-struct AddEntryView: View {
+struct AddSetsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(AppSettings.self) var settings
-    var editingEntry: WorkoutEntry?
+    var editingEntry: ExerciseSet?
     var date: Date
 
-    @Query(sort: \WorkoutEntry.time, order: .reverse) private var allEntries: [WorkoutEntry]
+    @Query(sort: \ExerciseSet.performedAt, order: .reverse) private var allEntries: [ExerciseSet]
 
     @State private var selectedExercise: Exercise?
     @State private var weight: Double
@@ -22,8 +22,8 @@ struct AddEntryView: View {
     @State private var showExerciseSelector = false
     @State private var defaultsApplied = false
 
-    private var lastEntryForDate: WorkoutEntry? {
-        allEntries.first { Calendar.current.isDate($0.date, inSameDayAs: date) }
+    private var lastEntryForDate: ExerciseSet? {
+        allEntries.first { Calendar.current.isDate($0.performedAt, inSameDayAs: date) }
     }
 
     private static let weightValuesLbs: [Double] = {
@@ -49,7 +49,7 @@ struct AddEntryView: View {
         return values.min(by: { abs($0 - value) < abs($1 - value) }) ?? value
     }
 
-    init(editingEntry: WorkoutEntry? = nil, date: Date = Date()) {
+    init(editingEntry: ExerciseSet? = nil, date: Date = Date()) {
         self.editingEntry = editingEntry
         self.date = date
         _selectedExercise = State(initialValue: editingEntry.flatMap { $0.exercise })
@@ -57,7 +57,7 @@ struct AddEntryView: View {
         let displayVal = s.displayWeight(editingEntry?.weight ?? 0)
         _weight = State(initialValue: Self.nearestPickerValue(displayVal, isMetric: s.isMetric))
         _reps = State(initialValue: editingEntry?.reps ?? 10)
-        _sets = State(initialValue: editingEntry?.sets ?? 3)
+        _sets = State(initialValue: 3)
     }
 
     var body: some View {
@@ -81,7 +81,7 @@ struct AddEntryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text(editingEntry == nil ? "Add Entry" : "Edit Entry")
+                    Text(editingEntry == nil ? "Add Sets" : "Edit Sets")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
                 }
@@ -98,7 +98,6 @@ struct AddEntryView: View {
                 let displayVal = settings.displayWeight(last.weight)
                 weight = Self.nearestPickerValue(displayVal, isMetric: settings.isMetric)
                 reps = last.reps
-                sets = last.sets
             }
         }
         .presentationDragIndicator(.visible)
@@ -263,25 +262,28 @@ struct AddEntryView: View {
     private func save() {
         let storageWeight = settings.toStorageLbs(weight)
         if let entry = editingEntry {
+            // Editing one specific set — the sets picker is ignored in edit mode.
             entry.exercise = selectedExercise
             entry.weight = storageWeight
             entry.reps = reps
-            entry.sets = sets
+            entry.updatedAt = Date()
         } else {
-            let entry = WorkoutEntry(
-                exercise: selectedExercise,
-                weight: storageWeight,
-                reps: reps,
-                sets: sets,
-                date: date
-            )
-            modelContext.insert(entry)
+            // Insert one ExerciseSet per set the user dialed in.
+            for _ in 0..<sets {
+                let entry = ExerciseSet(
+                    exercise: selectedExercise,
+                    weight: storageWeight,
+                    reps: reps,
+                    performedAt: date
+                )
+                modelContext.insert(entry)
+            }
         }
         dismiss()
     }
 }
 
 #Preview {
-    AddEntryView()
+    AddSetsView()
         .environment(AppSettings.shared)
 }

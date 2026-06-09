@@ -12,15 +12,15 @@ struct DayContentView: View {
 
     @Environment(\.modelContext) private var modelContext
     @Environment(AppSettings.self) var settings
-    @Query(sort: \WorkoutEntry.date) private var allEntries: [WorkoutEntry]
+    @Query(sort: \ExerciseSet.performedAt) private var allEntries: [ExerciseSet]
 
     @State private var displayDate: Date
     @State private var dragOffset: CGFloat = 0
     @State private var transitionOffset: CGFloat = 0
     @State private var dragDirection: DragDirection = .undecided
     @State private var isTransitioning = false
-    @State private var editingEntry: WorkoutEntry?
-    @State private var expandedEntryID: WorkoutEntry.ID?
+    @State private var editingEntry: ExerciseSet?
+    @State private var expandedEntryID: ExerciseSet.ID?
     @State private var suppressNextTap = false
 
     private enum DragDirection { case undecided, horizontal, vertical }
@@ -41,25 +41,25 @@ struct DayContentView: View {
         Calendar.current.date(byAdding: .day, value: 1, to: displayDate)!
     }
 
-    private var displayDateEntries: [WorkoutEntry] {
+    private var displayDateEntries: [ExerciseSet] {
         entries(for: displayDate)
     }
 
-    private func entries(for date: Date) -> [WorkoutEntry] {
+    private func entries(for date: Date) -> [ExerciseSet] {
         let start = Calendar.current.startOfDay(for: date)
         let end = Calendar.current.date(byAdding: .day, value: 1, to: start)!
-        return allEntries.filter { $0.date >= start && $0.date < end }
+        return allEntries.filter { $0.performedAt >= start && $0.performedAt < end }
     }
 
     private struct ExerciseGroup: Identifiable {
         let id: String
         let exercise: Exercise?
-        let entries: [WorkoutEntry]
+        let entries: [ExerciseSet]
     }
 
-    private func groupedEntries(_ entries: [WorkoutEntry]) -> [ExerciseGroup] {
+    private func groupedEntries(_ entries: [ExerciseSet]) -> [ExerciseGroup] {
         var orderKeys: [String] = []
-        var groups: [String: [WorkoutEntry]] = [:]
+        var groups: [String: [ExerciseSet]] = [:]
         for entry in entries {
             let key = entry.exercise.map { String(describing: $0.persistentModelID) } ?? "__nil__"
             if groups[key] == nil {
@@ -226,10 +226,10 @@ struct DayContentView: View {
             animateToDate(newDate)
         }
         .sheet(item: $editingEntry) { entry in
-            AddEntryView(editingEntry: entry)
+            AddSetsView(editingEntry: entry)
         }
         .sheet(isPresented: $showAddWorkoutForDate) {
-            AddEntryView(date: displayDate)
+            AddSetsView(date: displayDate)
         }
     }
 

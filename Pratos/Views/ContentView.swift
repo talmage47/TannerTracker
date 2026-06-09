@@ -45,7 +45,7 @@ struct ContentView: View {
                 selectedTab = tabBeforeAdd
             }
         }) {
-            AddEntryView()
+            AddSetsView()
         }
     }
 }

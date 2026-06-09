@@ -8,14 +8,14 @@ import SwiftData
 
 struct ExerciseEntryCard: View {
     let exercise: Exercise?
-    let entries: [WorkoutEntry]
+    let entries: [ExerciseSet]
     let unitLabel: String
     let accentColor: Color
     let isMetric: Bool
     var isEditing: Bool
-    var onTap: (WorkoutEntry) -> Void
-    var onDelete: (WorkoutEntry) -> Void
-    @Binding var expandedEntryID: WorkoutEntry.ID?
+    var onTap: (ExerciseSet) -> Void
+    var onDelete: (ExerciseSet) -> Void
+    @Binding var expandedEntryID: ExerciseSet.ID?
 
     private func displayedWeight(_ lbs: Double) -> Double {
         isMetric ? lbs / 2.20462 : lbs
@@ -95,7 +95,6 @@ struct ExerciseEntryCard: View {
                             HStack(spacing: 14) {
                                 WorkoutStatBadge(value: "\(formatWeight(displayedWeight(entry.weight))) \(unitLabel)", icon: "scalemass.fill")
                                 WorkoutStatBadge(value: "\(entry.reps) reps", icon: "repeat")
-                                WorkoutStatBadge(value: "\(entry.sets) sets", icon: "square.stack.fill")
                             }
 
                             Spacer()

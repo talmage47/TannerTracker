@@ -261,8 +261,8 @@ struct SettingsView: View {
         return "Pratos-\(formatter.string(from: Date())).\(ext)"
     }
 
-    private func fetchSortedEntries() -> [WorkoutEntry] {
-        let descriptor = FetchDescriptor<WorkoutEntry>(sortBy: [SortDescriptor(\WorkoutEntry.date), SortDescriptor(\WorkoutEntry.time)])
+    private func fetchSortedEntries() -> [ExerciseSet] {
+        let descriptor = FetchDescriptor<ExerciseSet>(sortBy: [SortDescriptor(\ExerciseSet.performedAt)])
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 
@@ -272,11 +272,10 @@ struct SettingsView: View {
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dicts: [[String: Any]] = entries.map { entry in
             [
-                "date": dateFormatter.string(from: entry.date),
+                "date": dateFormatter.string(from: entry.performedAt),
                 "exercise": entry.exercise?.name ?? "",
                 "weight_\(settings.unitLabel)": settings.displayWeight(entry.weight),
-                "reps": entry.reps,
-                "sets": entry.sets
+                "reps": entry.reps
             ]
         }
         guard let data = try? JSONSerialization.data(withJSONObject: dicts, options: .prettyPrinted) else { return "[]" }
@@ -287,13 +286,13 @@ struct SettingsView: View {
         let entries = fetchSortedEntries()
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        var lines = ["Date,Exercise,Weight (\(settings.unitLabel)),Reps,Sets"]
+        var lines = ["Date,Exercise,Weight (\(settings.unitLabel)),Reps"]
         for entry in entries {
-            let date = dateFormatter.string(from: entry.date)
+            let date = dateFormatter.string(from: entry.performedAt)
             let exercise = (entry.exercise?.name ?? "").replacingOccurrences(of: "\"", with: "\"\"")
             let weight = settings.displayWeight(entry.weight)
             let weightStr = weight.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(weight))" : String(format: "%.1f", weight)
-            lines.append("\(date),\"\(exercise)\",\(weightStr),\(entry.reps),\(entry.sets)")
+            lines.append("\(date),\"\(exercise)\",\(weightStr),\(entry.reps)")
         }
         return lines.joined(separator: "\n")
     }
@@ -325,15 +324,19 @@ struct SettingsView: View {
         }
     }
 
-    private func entryKey(name: String, dateStr: String, weightLbs: Double, reps: Int, sets: Int) -> String {
-        "\(name)|\(dateStr)|\(String(format: "%.1f", weightLbs))|\(reps)|\(sets)"
+    // Import/export logic will be rewritten in Commit B with legacy-format detection
+    // and proper per-set semantics. The current implementations below are minimal
+    // stubs that compile against the new schema. Real legacy import support comes next.
+
+    private func entryKey(name: String, dateStr: String, weightLbs: Double, reps: Int) -> String {
+        "\(name)|\(dateStr)|\(String(format: "%.1f", weightLbs))|\(reps)"
     }
 
     private func buildExistingKeys(dateFormatter: DateFormatter) -> Set<String> {
-        let entries = (try? modelContext.fetch(FetchDescriptor<WorkoutEntry>())) ?? []
+        let entries = (try? modelContext.fetch(FetchDescriptor<ExerciseSet>())) ?? []
         return Set(entries.compactMap { entry -> String? in
             guard let name = entry.exercise?.name else { return nil }
-            return entryKey(name: name, dateStr: dateFormatter.string(from: entry.date), weightLbs: entry.weight, reps: entry.reps, sets: entry.sets)
+            return entryKey(name: name, dateStr: dateFormatter.string(from: entry.performedAt), weightLbs: entry.weight, reps: entry.reps)
         })
     }
 
@@ -351,15 +354,14 @@ struct SettingsView: View {
             guard let dateStr = dict["date"] as? String,
                   let date = dateFormatter.date(from: dateStr),
                   let exerciseName = dict["exercise"] as? String,
-                  let reps = dict["reps"] as? Int,
-                  let sets = dict["sets"] as? Int else { continue }
+                  let reps = dict["reps"] as? Int else { continue }
             let weightLbs: Double
             if let w = dict["weight_lbs"] as? Double {
                 weightLbs = w
             } else if let w = dict["weight_kg"] as? Double {
                 weightLbs = w * 2.20462
             } else { continue }
-            let key = entryKey(name: exerciseName, dateStr: dateStr, weightLbs: weightLbs, reps: reps, sets: sets)
+            let key = entryKey(name: exerciseName, dateStr: dateStr, weightLbs: weightLbs, reps: reps)
             guard !seenKeys.contains(key) else { continue }
             seenKeys.insert(key)
             let exercise = exerciseMap[exerciseName] ?? {
@@ -368,7 +370,7 @@ struct SettingsView: View {
                 exerciseMap[exerciseName] = ex
                 return ex
             }()
-            modelContext.insert(WorkoutEntry(exercise: exercise, weight: weightLbs, reps: reps, sets: sets, date: date))
+            modelContext.insert(ExerciseSet(exercise: exercise, weight: weightLbs, reps: reps, performedAt: date))
             count += 1
         }
         return count
@@ -388,14 +390,13 @@ struct SettingsView: View {
         var count = 0
         for line in lines {
             let fields = parseCSVLine(line)
-            guard fields.count >= 5,
+            guard fields.count >= 4,
                   let date = dateFormatter.date(from: fields[0]),
                   let weightVal = Double(fields[2]),
-                  let reps = Int(fields[3]),
-                  let sets = Int(fields[4]) else { continue }
+                  let reps = Int(fields[3]) else { continue }
             let exerciseName = fields[1]
             let weightLbs = isMetric ? weightVal * 2.20462 : weightVal
-            let key = entryKey(name: exerciseName, dateStr: fields[0], weightLbs: weightLbs, reps: reps, sets: sets)
+            let key = entryKey(name: exerciseName, dateStr: fields[0], weightLbs: weightLbs, reps: reps)
             guard !seenKeys.contains(key) else { continue }
             seenKeys.insert(key)
             let exercise = exerciseMap[exerciseName] ?? {
@@ -404,7 +405,7 @@ struct SettingsView: View {
                 exerciseMap[exerciseName] = ex
                 return ex
             }()
-            modelContext.insert(WorkoutEntry(exercise: exercise, weight: weightLbs, reps: reps, sets: sets, date: date))
+            modelContext.insert(ExerciseSet(exercise: exercise, weight: weightLbs, reps: reps, performedAt: date))
             count += 1
         }
         return count
@@ -493,19 +494,21 @@ struct SettingsView: View {
                 let reps = spec.repCycle[week % spec.repCycle.count]
                 let base = spec.start + Double(week) * spec.gain + wave[week % wave.count]
                 let weight = weightForReps(base, reps: reps)
-                modelContext.insert(WorkoutEntry(
-                    exercise: exercise,
-                    weight: max(weight, 0),
-                    reps: reps,
-                    sets: spec.sets,
-                    date: date
-                ))
+                // Insert one ExerciseSet per set in the workout.
+                for _ in 0..<spec.sets {
+                    modelContext.insert(ExerciseSet(
+                        exercise: exercise,
+                        weight: max(weight, 0),
+                        reps: reps,
+                        performedAt: date
+                    ))
+                }
             }
         }
     }
 
     private func wipeAllData() {
-        try? modelContext.delete(model: WorkoutEntry.self)
+        try? modelContext.delete(model: ExerciseSet.self)
         try? modelContext.delete(model: Exercise.self)
     }
     #endif

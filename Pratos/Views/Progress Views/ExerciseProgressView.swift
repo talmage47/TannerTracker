@@ -53,8 +53,8 @@ struct ExerciseProgressView: View {
     @State private var isDragging = false
     @State private var chartMode: ChartMode = .estimatedOneRM
 
-    private var exerciseEntries: [WorkoutEntry] {
-        (exercise.entries ?? []).sorted { $0.date < $1.date }
+    private var exerciseEntries: [ExerciseSet] {
+        (exercise.sets ?? []).sorted { $0.performedAt < $1.performedAt }
     }
 
     private func dw(_ lbs: Double) -> Double {
@@ -76,7 +76,7 @@ struct ExerciseProgressView: View {
     private var epleyData: [DayEpley] {
         let calendar = Calendar.current
         let grouped = Dictionary(grouping: exerciseEntries) { entry in
-            calendar.startOfDay(for: entry.date)
+            calendar.startOfDay(for: entry.performedAt)
         }
         return grouped.compactMap { day, entries in
             guard let best = entries.max(by: {
@@ -115,7 +115,7 @@ struct ExerciseProgressView: View {
     private func repMaxData(for reps: Int) -> [DayEpley] {
         let calendar = Calendar.current
         let filtered = exerciseEntries.filter { $0.reps == reps }
-        let grouped = Dictionary(grouping: filtered) { calendar.startOfDay(for: $0.date) }
+        let grouped = Dictionary(grouping: filtered) { calendar.startOfDay(for: $0.performedAt) }
         return grouped.compactMap { day, entries in
             guard let best = entries.max(by: { $0.weight < $1.weight }) else { return nil }
             return DayEpley(date: day, value: dw(best.weight), weight: dw(best.weight), reps: best.reps)

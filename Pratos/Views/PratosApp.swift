@@ -13,7 +13,7 @@ struct PratosApp: App {
     @State private var showCloudKitAlert: Bool
 
     init() {
-        let schema = Schema([Exercise.self, WorkoutEntry.self])
+        let schema = Schema(versionedSchema: SchemaV1.self)
         let (c, available) = Self.makeContainer(schema: schema)
         container = c
         iCloudAvailable = available
@@ -49,20 +49,20 @@ struct PratosApp: App {
         )
 
         // 1. Happy path — CloudKit available.
-        if let container = try? ModelContainer(for: schema, configurations: [cloudConfig]) {
+        if let container = try? ModelContainer(for: schema, migrationPlan: PratosMigrationPlan.self, configurations: [cloudConfig]) {
             return (container, true)
         }
 
         // 2. CloudKit unavailable — fall back to the separate local store file.
         //    No conflict possible since they're different paths.
-        if let container = try? ModelContainer(for: schema, configurations: [localConfig]) {
+        if let container = try? ModelContainer(for: schema, migrationPlan: PratosMigrationPlan.self, configurations: [localConfig]) {
             return (container, false)
         }
 
         // 3. Local store corrupt/incompatible — wipe only the local store and retry.
         wipeStore(at: base.appending(path: "local.store"))
         do {
-            return (try ModelContainer(for: schema, configurations: [localConfig]), false)
+            return (try ModelContainer(for: schema, migrationPlan: PratosMigrationPlan.self, configurations: [localConfig]), false)
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
