@@ -1,2 +1,3 @@
-# Pratos
-A simple weightlifting progress tracker written at the request of my friend
+# Pratos App
+
+A simple weightlifting progress tracker written at the request of my friend.
