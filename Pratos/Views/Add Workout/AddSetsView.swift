@@ -10,7 +10,7 @@ struct AddSetsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Environment(AppSettings.self) var settings
-    var editingEntry: ExerciseSet?
+    var editingGroup: SetGroup?
     var date: Date
 
     @Query(sort: \ExerciseSet.performedAt, order: .reverse) private var allEntries: [ExerciseSet]
@@ -49,15 +49,15 @@ struct AddSetsView: View {
         return values.min(by: { abs($0 - value) < abs($1 - value) }) ?? value
     }
 
-    init(editingEntry: ExerciseSet? = nil, date: Date = Date()) {
-        self.editingEntry = editingEntry
+    init(editingGroup: SetGroup? = nil, date: Date = Date()) {
+        self.editingGroup = editingGroup
         self.date = date
-        _selectedExercise = State(initialValue: editingEntry.flatMap { $0.exercise })
+        _selectedExercise = State(initialValue: editingGroup?.exercise)
         let s = AppSettings.shared
-        let displayVal = s.displayWeight(editingEntry?.weight ?? 0)
+        let displayVal = s.displayWeight(editingGroup?.weight ?? 0)
         _weight = State(initialValue: Self.nearestPickerValue(displayVal, isMetric: s.isMetric))
-        _reps = State(initialValue: editingEntry?.reps ?? 10)
-        _sets = State(initialValue: 3)
+        _reps = State(initialValue: editingGroup?.reps ?? 10)
+        _sets = State(initialValue: editingGroup?.count ?? 3)
     }
 
     var body: some View {
@@ -81,14 +81,14 @@ struct AddSetsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    Text(editingEntry == nil ? "Add Sets" : "Edit Sets")
+                    Text(editingGroup == nil ? "Add Sets" : "Edit Sets")
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(.white)
                 }
             }
         }
         .onAppear {
-            guard !defaultsApplied, editingEntry == nil else {
+            guard !defaultsApplied, editingGroup == nil else {
                 defaultsApplied = true
                 return
             }
@@ -218,9 +218,9 @@ struct AddSetsView: View {
 
     private var saveButton: some View {
         HStack(spacing: 16) {
-            if editingEntry != nil {
+            if editingGroup != nil {
                 Button {
-                    deleteEntry()
+                    deleteGroup()
                 } label: {
                     Text("Delete")
                         .font(.headline)
@@ -248,9 +248,9 @@ struct AddSetsView: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func deleteEntry() {
-        if let entry = editingEntry {
-            modelContext.delete(entry)
+    private func deleteGroup() {
+        if let group = editingGroup {
+            for set in group.sets { modelContext.delete(set) }
         }
         dismiss()
     }
@@ -259,25 +259,23 @@ struct AddSetsView: View {
         value.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(value))" : String(format: "%.1f", value)
     }
 
+    // On save in edit mode we use a replace strategy: delete every set in the group, then
+    // insert `sets` fresh records with the new weight/reps. Simpler than incremental diffing
+    // and matches the "you're editing a workout entry" mental model.
     private func save() {
         let storageWeight = settings.toStorageLbs(weight)
-        if let entry = editingEntry {
-            // Editing one specific set — the sets picker is ignored in edit mode.
-            entry.exercise = selectedExercise
-            entry.weight = storageWeight
-            entry.reps = reps
-            entry.updatedAt = Date()
-        } else {
-            // Insert one ExerciseSet per set the user dialed in.
-            for _ in 0..<sets {
-                let entry = ExerciseSet(
-                    exercise: selectedExercise,
-                    weight: storageWeight,
-                    reps: reps,
-                    performedAt: date
-                )
-                modelContext.insert(entry)
-            }
+        let performedAt = editingGroup?.sets.first?.performedAt ?? date
+        if let group = editingGroup {
+            for set in group.sets { modelContext.delete(set) }
+        }
+        for _ in 0..<sets {
+            let entry = ExerciseSet(
+                exercise: selectedExercise,
+                weight: storageWeight,
+                reps: reps,
+                performedAt: performedAt
+            )
+            modelContext.insert(entry)
         }
         dismiss()
     }

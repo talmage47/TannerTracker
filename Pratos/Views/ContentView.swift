@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 enum AppTab {
     case today, progress, add
@@ -11,6 +12,7 @@ enum AppTab {
 
 struct ContentView: View {
     @Environment(AppSettings.self) var settings
+    @Environment(\.modelContext) private var modelContext
     @State private var selectedTab: AppTab = .today
     @State private var tabBeforeAdd: AppTab = .today
     @State private var showAddWorkout = false
@@ -46,6 +48,9 @@ struct ContentView: View {
             }
         }) {
             AddSetsView()
+        }
+        .task {
+            Tag.seedDefaultsIfNeeded(in: modelContext)
         }
     }
 }

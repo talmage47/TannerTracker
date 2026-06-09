@@ -43,4 +43,28 @@ class Tag {
         self.createdAt = Date()
         self.updatedAt = Date()
     }
+
+    // Seeded once on first launch (when the Tag table is empty) so the picker isn't blank.
+    // User can rename, delete, recolor, or add their own afterwards.
+    static let defaults: [(name: String, kind: TagKind)] = [
+        ("Push", .split), ("Pull", .split), ("Legs", .split),
+        ("Upper", .split), ("Lower", .split), ("Full Body", .split),
+        ("Chest", .muscleGroup), ("Back", .muscleGroup), ("Shoulders", .muscleGroup),
+        ("Quads", .muscleGroup), ("Hamstrings", .muscleGroup), ("Glutes", .muscleGroup),
+        ("Biceps", .muscleGroup), ("Triceps", .muscleGroup), ("Calves", .muscleGroup),
+        ("Core", .muscleGroup),
+        ("Barbell", .equipment), ("Dumbbell", .equipment), ("Cable", .equipment),
+        ("Machine", .equipment), ("Smith Machine", .equipment), ("Bodyweight", .equipment),
+        ("Kettlebell", .equipment), ("Bands", .equipment),
+        ("Compound", .movement), ("Isolation", .movement),
+    ]
+
+    static func seedDefaultsIfNeeded(in context: ModelContext) {
+        let count = (try? context.fetchCount(FetchDescriptor<Tag>())) ?? 0
+        guard count == 0 else { return }
+        for (index, entry) in defaults.enumerated() {
+            context.insert(Tag(name: entry.name, kind: entry.kind, sortOrder: index))
+        }
+        try? context.save()
+    }
 }

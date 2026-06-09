@@ -19,8 +19,8 @@ struct DayContentView: View {
     @State private var transitionOffset: CGFloat = 0
     @State private var dragDirection: DragDirection = .undecided
     @State private var isTransitioning = false
-    @State private var editingEntry: ExerciseSet?
-    @State private var expandedEntryID: ExerciseSet.ID?
+    @State private var editingGroup: SetGroup?
+    @State private var expandedGroupID: SetGroup.ID?
     @State private var suppressNextTap = false
 
     private enum DragDirection { case undecided, horizontal, vertical }
@@ -152,7 +152,7 @@ struct DayContentView: View {
                                 isEditing: false,
                                 onTap: { _ in },
                                 onDelete: { _ in },
-                                expandedEntryID: .constant(nil)
+                                expandedGroupID: .constant(nil)
                             )
                         }
                     }
@@ -196,7 +196,7 @@ struct DayContentView: View {
             .simultaneousGesture(
                 DragGesture(minimumDistance: 10)
                     .onChanged { value in
-                        if expandedEntryID != nil && value.translation.width > 0 { return }
+                        if expandedGroupID != nil && value.translation.width > 0 { return }
                         if dragDirection == .undecided {
                             dragDirection = abs(value.translation.width) > abs(value.translation.height)
                                 ? .horizontal : .vertical
@@ -210,7 +210,7 @@ struct DayContentView: View {
                             dragDirection = .undecided
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { suppressNextTap = false }
                         }
-                        if expandedEntryID != nil && value.translation.width > 0 { return }
+                        if expandedGroupID != nil && value.translation.width > 0 { return }
                         guard dragDirection == .horizontal else { return }
                         let h = value.translation.width
                         let v = value.translation.height
@@ -225,8 +225,8 @@ struct DayContentView: View {
         .onChange(of: selectedDate) { _, newDate in
             animateToDate(newDate)
         }
-        .sheet(item: $editingEntry) { entry in
-            AddSetsView(editingEntry: entry)
+        .sheet(item: $editingGroup) { group in
+            AddSetsView(editingGroup: group, date: displayDate)
         }
         .sheet(isPresented: $showAddWorkoutForDate) {
             AddSetsView(date: displayDate)
@@ -258,12 +258,14 @@ struct DayContentView: View {
                         accentColor: settings.accentColor,
                         isMetric: settings.isMetric,
                         isEditing: isEditing,
-                        onTap: { entry in
+                        onTap: { setGroup in
                             guard !suppressNextTap else { return }
-                            editingEntry = entry
+                            editingGroup = setGroup
                         },
-                        onDelete: { entry in modelContext.delete(entry) },
-                        expandedEntryID: $expandedEntryID
+                        onDelete: { setGroup in
+                            for set in setGroup.sets { modelContext.delete(set) }
+                        },
+                        expandedGroupID: $expandedGroupID
                     )
                 }
 
@@ -287,9 +289,9 @@ struct DayContentView: View {
         .ignoresSafeArea(.container, edges: .bottom)
         .scrollDisabled(dragDirection == .horizontal || isTransitioning)
         .onScrollPhaseChange { _, newPhase in
-            if newPhase == .interacting, expandedEntryID != nil {
+            if newPhase == .interacting, expandedGroupID != nil {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    expandedEntryID = nil
+                    expandedGroupID = nil
                 }
             }
         }

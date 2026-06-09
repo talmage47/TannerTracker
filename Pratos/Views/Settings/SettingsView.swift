@@ -248,7 +248,7 @@ struct SettingsView: View {
             if let error = importError {
                 Text(error)
             } else {
-                Text("Successfully imported \(importedCount) \(importedCount == 1 ? "entry" : "entries").")
+                Text("Successfully imported \(importedCount) \(importedCount == 1 ? "set" : "sets").")
             }
         }
     }
@@ -324,20 +324,14 @@ struct SettingsView: View {
         }
     }
 
-    // Import/export logic will be rewritten in Commit B with legacy-format detection
-    // and proper per-set semantics. The current implementations below are minimal
-    // stubs that compile against the new schema. Real legacy import support comes next.
-
-    private func entryKey(name: String, dateStr: String, weightLbs: Double, reps: Int) -> String {
-        "\(name)|\(dateStr)|\(String(format: "%.1f", weightLbs))|\(reps)"
-    }
-
-    private func buildExistingKeys(dateFormatter: DateFormatter) -> Set<String> {
-        let entries = (try? modelContext.fetch(FetchDescriptor<ExerciseSet>())) ?? []
-        return Set(entries.compactMap { entry -> String? in
-            guard let name = entry.exercise?.name else { return nil }
-            return entryKey(name: name, dateStr: dateFormatter.string(from: entry.performedAt), weightLbs: entry.weight, reps: entry.reps)
-        })
+    // A flattened import row — one record per individual set. Legacy files with a "sets"
+    // count field are expanded into N rows at parse time so the rest of the pipeline doesn't
+    // care about format.
+    private struct ImportRow: Hashable {
+        let name: String
+        let dayStart: Date    // normalized to startOfDay so per-set time-of-day differences don't break bucketing
+        let weightLbs: Double
+        let reps: Int
     }
 
     private func importJSON(_ data: Data) throws -> Int {
@@ -346,34 +340,25 @@ struct SettingsView: View {
         }
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        let existing = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
-        var exerciseMap = Dictionary(uniqueKeysWithValues: existing.map { ($0.name, $0) })
-        var seenKeys = buildExistingKeys(dateFormatter: dateFormatter)
-        var count = 0
+        var rows: [(row: ImportRow, originalDate: Date)] = []
         for dict in array {
             guard let dateStr = dict["date"] as? String,
                   let date = dateFormatter.date(from: dateStr),
-                  let exerciseName = dict["exercise"] as? String,
+                  let name = dict["exercise"] as? String,
                   let reps = dict["reps"] as? Int else { continue }
             let weightLbs: Double
-            if let w = dict["weight_lbs"] as? Double {
-                weightLbs = w
-            } else if let w = dict["weight_kg"] as? Double {
-                weightLbs = w * 2.20462
-            } else { continue }
-            let key = entryKey(name: exerciseName, dateStr: dateStr, weightLbs: weightLbs, reps: reps)
-            guard !seenKeys.contains(key) else { continue }
-            seenKeys.insert(key)
-            let exercise = exerciseMap[exerciseName] ?? {
-                let ex = Exercise(name: exerciseName)
-                modelContext.insert(ex)
-                exerciseMap[exerciseName] = ex
-                return ex
-            }()
-            modelContext.insert(ExerciseSet(exercise: exercise, weight: weightLbs, reps: reps, performedAt: date))
-            count += 1
+            if let w = dict["weight_lbs"] as? Double { weightLbs = w }
+            else if let w = dict["weight_kg"] as? Double { weightLbs = w * 2.20462 }
+            else { continue }
+            // LEGACY_TANNERTRACKER_IMPORT — remove when no longer needed.
+            // Old TannerTracker JSON had a "sets" Int field. Each row represented N identical sets.
+            // New Pratos JSON is one row per set with no "sets" field.
+            let setsCount = (dict["sets"] as? Int) ?? 1
+            let dayStart = Calendar.current.startOfDay(for: date)
+            let row = ImportRow(name: name, dayStart: dayStart, weightLbs: weightLbs, reps: reps)
+            for _ in 0..<setsCount { rows.append((row, date)) }
         }
-        return count
+        return mergeImportRows(rows)
     }
 
     private func importCSV(_ data: Data) throws -> Int {
@@ -382,33 +367,80 @@ struct SettingsView: View {
         guard lines.count > 1 else { return 0 }
         let header = lines.removeFirst()
         let isMetric = header.contains("(kg)")
+        // LEGACY_TANNERTRACKER_IMPORT — remove when no longer needed.
+        // Old TannerTracker CSV header was "Date,Exercise,Weight (...),Reps,Sets" — column 4 was the sets count.
+        // New Pratos CSV header is "Date,Exercise,Weight (...),Reps" with no sets column.
+        let isLegacy = header.lowercased().contains(",sets")
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
-        let existing = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
-        var exerciseMap = Dictionary(uniqueKeysWithValues: existing.map { ($0.name, $0) })
-        var seenKeys = buildExistingKeys(dateFormatter: dateFormatter)
-        var count = 0
+        var rows: [(row: ImportRow, originalDate: Date)] = []
         for line in lines {
             let fields = parseCSVLine(line)
             guard fields.count >= 4,
                   let date = dateFormatter.date(from: fields[0]),
                   let weightVal = Double(fields[2]),
                   let reps = Int(fields[3]) else { continue }
-            let exerciseName = fields[1]
+            let name = fields[1]
             let weightLbs = isMetric ? weightVal * 2.20462 : weightVal
-            let key = entryKey(name: exerciseName, dateStr: fields[0], weightLbs: weightLbs, reps: reps)
-            guard !seenKeys.contains(key) else { continue }
-            seenKeys.insert(key)
-            let exercise = exerciseMap[exerciseName] ?? {
-                let ex = Exercise(name: exerciseName)
+            let setsCount = isLegacy ? (fields.count >= 5 ? (Int(fields[4]) ?? 1) : 1) : 1
+            let dayStart = Calendar.current.startOfDay(for: date)
+            let row = ImportRow(name: name, dayStart: dayStart, weightLbs: weightLbs, reps: reps)
+            for _ in 0..<setsCount { rows.append((row, date)) }
+        }
+        return mergeImportRows(rows)
+    }
+
+    // Bucket-count dedup: for each (exercise, day, weight, reps) bucket, insert the difference
+    // between what the import file has and what's already in storage. Idempotent — importing
+    // the same file twice does nothing the second time.
+    private func mergeImportRows(_ rows: [(row: ImportRow, originalDate: Date)]) -> Int {
+        // Count import rows per bucket
+        var importCounts: [ImportRow: Int] = [:]
+        var firstDateInBucket: [ImportRow: Date] = [:]
+        for (row, originalDate) in rows {
+            importCounts[row, default: 0] += 1
+            if firstDateInBucket[row] == nil { firstDateInBucket[row] = originalDate }
+        }
+
+        // Count existing records per bucket
+        let existingSets = (try? modelContext.fetch(FetchDescriptor<ExerciseSet>())) ?? []
+        var existingCounts: [ImportRow: Int] = [:]
+        for entry in existingSets {
+            guard let name = entry.exercise?.name else { continue }
+            let bucket = ImportRow(
+                name: name,
+                dayStart: Calendar.current.startOfDay(for: entry.performedAt),
+                weightLbs: entry.weight,
+                reps: entry.reps
+            )
+            existingCounts[bucket, default: 0] += 1
+        }
+
+        let existingExercises = (try? modelContext.fetch(FetchDescriptor<Exercise>())) ?? []
+        var exerciseMap = Dictionary(uniqueKeysWithValues: existingExercises.map { ($0.name, $0) })
+
+        var inserted = 0
+        for (bucket, importCount) in importCounts {
+            let toInsert = max(0, importCount - (existingCounts[bucket] ?? 0))
+            guard toInsert > 0 else { continue }
+            let exercise = exerciseMap[bucket.name] ?? {
+                let ex = Exercise(name: bucket.name)
                 modelContext.insert(ex)
-                exerciseMap[exerciseName] = ex
+                exerciseMap[bucket.name] = ex
                 return ex
             }()
-            modelContext.insert(ExerciseSet(exercise: exercise, weight: weightLbs, reps: reps, performedAt: date))
-            count += 1
+            let performedAt = firstDateInBucket[bucket] ?? bucket.dayStart
+            for _ in 0..<toInsert {
+                modelContext.insert(ExerciseSet(
+                    exercise: exercise,
+                    weight: bucket.weightLbs,
+                    reps: bucket.reps,
+                    performedAt: performedAt
+                ))
+                inserted += 1
+            }
         }
-        return count
+        return inserted
     }
 
     private func parseCSVLine(_ line: String) -> [String] {

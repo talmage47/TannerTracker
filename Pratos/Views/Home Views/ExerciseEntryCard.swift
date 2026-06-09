@@ -6,6 +6,45 @@
 import SwiftUI
 import SwiftData
 
+// One display row in the card — a run of consecutive identical (weight, reps) sets.
+// Built lazily from a flat [ExerciseSet] in the parent; not persisted.
+struct SetGroup: Identifiable, Hashable {
+    let id: UUID
+    let exercise: Exercise?
+    let weight: Double
+    let reps: Int
+    let sets: [ExerciseSet]
+    var count: Int { sets.count }
+
+    static func == (lhs: SetGroup, rhs: SetGroup) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
+// Group consecutive identical (weight, reps) ExerciseSets into SetGroups.
+// Non-consecutive identical sets stay in separate groups (each "logging session" is its own row).
+func groupedSets(_ entries: [ExerciseSet]) -> [SetGroup] {
+    var runs: [[ExerciseSet]] = []
+    for entry in entries {
+        if let last = runs.last?.last,
+           last.weight == entry.weight,
+           last.reps == entry.reps {
+            runs[runs.count - 1].append(entry)
+        } else {
+            runs.append([entry])
+        }
+    }
+    return runs.compactMap { sets in
+        guard let first = sets.first else { return nil }
+        return SetGroup(
+            id: first.id,
+            exercise: first.exercise,
+            weight: first.weight,
+            reps: first.reps,
+            sets: sets
+        )
+    }
+}
+
 struct ExerciseEntryCard: View {
     let exercise: Exercise?
     let entries: [ExerciseSet]
@@ -13,9 +52,11 @@ struct ExerciseEntryCard: View {
     let accentColor: Color
     let isMetric: Bool
     var isEditing: Bool
-    var onTap: (ExerciseSet) -> Void
-    var onDelete: (ExerciseSet) -> Void
-    @Binding var expandedEntryID: ExerciseSet.ID?
+    var onTap: (SetGroup) -> Void
+    var onDelete: (SetGroup) -> Void
+    @Binding var expandedGroupID: SetGroup.ID?
+
+    private var groups: [SetGroup] { groupedSets(entries) }
 
     private func displayedWeight(_ lbs: Double) -> Double {
         isMetric ? lbs / 2.20462 : lbs
@@ -27,7 +68,7 @@ struct ExerciseEntryCard: View {
 
     private func closeExpanded() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            expandedEntryID = nil
+            expandedGroupID = nil
         }
     }
 
@@ -43,11 +84,11 @@ struct ExerciseEntryCard: View {
             .padding(.vertical, 12)
             .contentShape(Rectangle())
             .onTapGesture {
-                if expandedEntryID != nil { closeExpanded() }
+                if expandedGroupID != nil { closeExpanded() }
             }
 
-            ForEach(entries) { entry in
-                let isExpanded = isEditing && expandedEntryID == entry.id
+            ForEach(groups) { group in
+                let isExpanded = isEditing && expandedGroupID == group.id
 
                 Rectangle()
                     .fill(Color.white.opacity(0.08))
@@ -58,7 +99,7 @@ struct ExerciseEntryCard: View {
                     if isEditing {
                         Button {
                             closeExpanded()
-                            onDelete(entry)
+                            onDelete(group)
                         } label: {
                             Text("Delete")
                                 .font(.subheadline.weight(.semibold))
@@ -71,17 +112,17 @@ struct ExerciseEntryCard: View {
                     }
 
                     Button {
-                        if expandedEntryID != nil {
+                        if expandedGroupID != nil {
                             closeExpanded()
                         } else if !isEditing {
-                            onTap(entry)
+                            onTap(group)
                         }
                     } label: {
                         HStack(spacing: 12) {
                             if isEditing {
                                 Button {
                                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                        expandedEntryID = isExpanded ? nil : entry.id
+                                        expandedGroupID = isExpanded ? nil : group.id
                                     }
                                 } label: {
                                     Image(systemName: "minus.circle.fill")
@@ -93,8 +134,9 @@ struct ExerciseEntryCard: View {
                             }
 
                             HStack(spacing: 14) {
-                                WorkoutStatBadge(value: "\(formatWeight(displayedWeight(entry.weight))) \(unitLabel)", icon: "scalemass.fill")
-                                WorkoutStatBadge(value: "\(entry.reps) reps", icon: "repeat")
+                                WorkoutStatBadge(value: "\(formatWeight(displayedWeight(group.weight))) \(unitLabel)", icon: "scalemass.fill")
+                                WorkoutStatBadge(value: "\(group.reps) reps", icon: "repeat")
+                                WorkoutStatBadge(value: "\(group.count) \(group.count == 1 ? "set" : "sets")", icon: "square.stack.fill")
                             }
 
                             Spacer()
